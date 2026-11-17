@@ -6,6 +6,7 @@ import dayUrl from '../assets/day.jpg';
 import nightUrl from '../assets/night.jpg';
 import CITIES from '../assets/cities.json';
 import { clamp, smooth, fbm } from './util.js';
+import { City, BASE } from './city.js';
 
 export const CH = 192;          // chunk size in metres (two city blocks)
 export const BLOCK = 96;
@@ -51,9 +52,9 @@ export const Geo = {
   color(lat, lon, out) { out[0] = sample(img.day, lat, lon, 0) / 255; out[1] = sample(img.day, lat, lon, 1) / 255; out[2] = sample(img.day, lat, lon, 2) / 255; return out; },
 
   // ---- local metric frame: x = east, z = south, anchored to a global chunk grid so places persist
-  setOrigin(lat, lon) {
+  setOrigin(lat, lon, zone) {
     lat = clamp(lat, -84, 84);
-    this.band = Math.round(lat); this.cosB = Math.cos(this.band * Math.PI / 180);
+    this.band = zone ? zone.lat0 : Math.round(lat); this.cosB = Math.cos(this.band * Math.PI / 180);
     this.oz = Math.round(-lat * M / CH); this.ox = Math.round(lon * M * this.cosB / CH);
     this.lat0 = lat; this.lon0 = lon; ucache.clear();
     // local position of the exact requested point
@@ -98,12 +99,22 @@ export const Geo = {
     return v;
   },
   urban(x, z) {
+    if (City.inside(x, z)) return 1;
     const fx = x / CH, fz = z / CH, cx = Math.floor(fx), cz = Math.floor(fz), tx = fx - cx, tz = fz - cz;
     const a = this.urbanCorner(cx, cz).u, b = this.urbanCorner(cx + 1, cz).u, c = this.urbanCorner(cx, cz + 1).u, d = this.urbanCorner(cx + 1, cz + 1).u;
     return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz;
   },
   // terrain height in metres above sea level at a local position
   height(x, z) {
+    if (City.active) {
+      const c = City.active, pad = 600, out = Math.max(c.x0 - x, x - c.x1, c.z0 - z, z - c.z1);
+      const ch = (x, z) => { const l = City.landAt(x, z); return l > 0.999 ? BASE : -3.2 + (BASE + 3.2) * smooth(0.3, 0.7, l); };
+      if (out < 0) return ch(x, z);
+      if (out < pad) { const k = smooth(0, pad, out), hb = ch(clamp(x, c.x0, c.x1 - 0.01), clamp(z, c.z0, c.z1 - 0.01)); return hb * (1 - k) + this.rawHeight(x, z) * k; }
+    }
+    return this.rawHeight(x, z);
+  },
+  rawHeight(x, z) {
     const lat = this.toLat(z), lon = this.toLon(x);
     const shore = (this.land(lat, lon) - 0.5) * 2;
     if (shore < 0) return Math.max(shore * 70, -60);

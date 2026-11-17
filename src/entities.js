@@ -2,18 +2,25 @@
 // officers, the police helicopter, and the wanted system that ties them together.
 import * as THREE from 'three';
 import { G, clamp, lerp, damp, angDiff, TAU } from './util.js';
-import { Geo, BLOCK } from './geo.js';
-import { makeRig, animateRig, tintRig, makeCar, makeHeli } from './rig.js';
+import { Geo, BLOCK, CH } from './geo.js';
+import { makeRig, animateRig, tintRig, makeHeli, civilianLook, copLook, thugLook } from './rig.js';
+import { makeVehicle, dent } from './vehicles.js';
+import { City, ROAD_W, DRIVABLE, BASE } from './city.js';
+import { region } from './regions.js';
 
 const V = () => new THREE.Vector3(), _a = V(), _b = V(), _c = V(), out = {};
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]], LANE = 3.4, GRAV = 26;
 const CAR_COLORS = [0xb8bcc2, 0x15171a, 0xf1f1ee, 0x8a1b1b, 0x1d3a6b, 0x39424a, 0x6d6f73, 0x1f5a45, 0xc9a227, 0x7a4b2a];
-const roadLine = v => Math.round(v / BLOCK) * BLOCK;
+const roadLine = v => Math.round(v / BLOCK) * BLOCK, _o = {}, _p = {};
+const DIRS_OK = (R, e) => DRIVABLE(R.cls[e]) && R.cls[e] !== 8 && !(R.flags[e] & 2) && R.len[e] > 8;
+const SPEED = [0, 22, 18, 14, 12.5, 11, 8.5, 5, 5];
+const PAINT = [0xb8bcc2, 0x15171a, 0xf1f1ee, 0x8a1b1b, 0x1d3a6b, 0x39424a, 0x6d6f73, 0x1f5a45, 0x9a9c9e, 0x7a4b2a, 0x2a4a7a, 0xd8d6d0];
 
 // ================= cars =================
 export class Car {
-  constructor(type, color, police) {
-    this.m = makeCar(type, color, police); this.type = type; this.police = police; this.spec = this.m.spec;
+  constructor(type, color, police, regKey) {
+    this.m = makeVehicle(type, color, police, regKey); this.type = type; this.police = !!police; this.spec = this.m.spec; this.av = 0; this.pitch = 0; this.roll = 0; this.lastVf = 0;
+    this.circ = Math.max(2, Math.ceil(this.spec.len / this.spec.w));
     this.pos = V(); this.vel = V(); this.yaw = 0; this.vf = 0; this.vy = 0; this.hp = 100; this.ai = 'traffic';
     this.dir = 0; this.plan = null; this.sinceTurn = 99; this.cruise = 9 + Math.random() * 5; this.frozen = 0; this.emp = 0; this.infected = 0; this.gen = 0;
     this.dead = false; this.deadT = 0; this.stuck = 0; this.rev = 0; this.grounded = true; this.occupied = true; this.launch = 0;
@@ -31,33 +38,52 @@ export class Car {
       if (handbrake) vf -= Math.sign(vf) * Math.min(Math.abs(vf), 16 * dt);
       vf = clamp(vf, -13, s.max * (this.boost || 1));
       vs *= Math.exp(-(handbrake ? 1.4 : 6.5 - Math.min(3.5, Math.abs(vf) * 0.06)) * dt);
-      this.yaw -= steer * (2.4 / (1 + Math.abs(vf) / 24)) * clamp(vf / 5, -1, 1) * dt * (handbrake ? 1.5 : 1);
+      this.yaw -= steer * (2.4 / (1 + Math.abs(vf) / 24)) * clamp(vf / 5, -1, 1) * dt * (handbrake ? 1.5 : 1) * (this.spec.len > 8 ? 0.55 : 1);
       fx = Math.sin(this.yaw); fz = Math.cos(this.yaw); this.vel.x = fx * vf - fz * vs; this.vel.z = fz * vf + fx * vs;
     }
     this.vf = vf; this.steer = steer; this.physics(dt);
   }
   physics(dt) {
     const p = this.pos; this.vy -= GRAV * dt; p.x += this.vel.x * dt; p.z += this.vel.z * dt; p.y += this.vy * dt;
-    _b.set(this.vel.x, this.vy, this.vel.z); const before = Math.hypot(this.vel.x, this.vel.z);
-    G.world.collide(p, 1.5, 1.4, _b, out);
-    if (out.wall) { const loss = before - Math.hypot(_b.x, _b.z); if (loss > 5) { this.damage(loss * 1.6); G.audio.crash(p, loss); if (this === G.player.car) G.shake = Math.min(1, loss / 20); } }
-    this.vel.x = _b.x; this.vel.z = _b.z; const g = out.ground;
-    if (out.grounded) { this.vy = 0; this.grounded = true; } else if (this.grounded && p.y - g < 0.5 && this.vy <= 0) { p.y = g; this.vy = 0; } else this.grounded = false;
-    if (g < -1.2 && p.y < -0.6) { this.vel.multiplyScalar(Math.exp(-3 * dt)); p.y = Math.max(p.y, -1.2); this.vy = Math.max(this.vy, 0); this.grounded = true; if (this.frozenWater) p.y = 0; }
-    this.sync(dt);
+    this.yaw += this.av * dt; this.av *= Math.exp(-(this.grounded ? 2.6 : 0.4) * dt);
+    // the body is a row of circles nose to tail, so corners clip and spin the car
+    const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw), n = this.circ, r = this.spec.w / 2 + 0.05, half = this.spec.len / 2 - r;
+    let grounded = false, g = -1e9, hitN = null, before = Math.hypot(this.vel.x, this.vel.z);
+    for (let i = 0; i < n; i++) {
+      const o = n === 1 ? 0 : -half + (2 * half) * i / (n - 1), cx = p.x + fx * o, cz = p.z + fz * o;
+      _c.set(cx, p.y, cz); _b.set(this.vel.x + this.av * o * fz, this.vy, this.vel.z - this.av * o * fx);
+      G.world.collide(_c, r, 1.4, _b, out, true);
+      const dx = _c.x - cx, dz = _c.z - cz;
+      if (dx || dz) {
+        p.x += dx; p.z += dz; const l = Math.hypot(dx, dz), nx = dx / l, nz = dz / l, vn = this.vel.x * nx + this.vel.z * nz;
+        if (vn < 0) { this.vel.x -= vn * nx * 1.15; this.vel.z -= vn * nz * 1.15; const I = this.spec.mass * (this.spec.len ** 2 + this.spec.w ** 2) / 12, J = -vn * this.spec.mass * 1.15; this.av += (o * fz * nx * J - o * fx * nz * J) / I * 0.6; if (!hitN) hitN = [nx, nz, cx - nx * r, cz - nz * r, -vn]; }
+      }
+      if (out.grounded) grounded = true; g = Math.max(g, out.ground); if (_c.y > p.y) p.y = _c.y;
+    }
+    if (hitN) { const loss = hitN[4]; if (loss > 4) { this.damage(loss * 1.5 * (this.spec.mass > 5000 ? 0.3 : 1), hitN[2], hitN[3]); G.audio.crash(p, loss); if (this === G.player.car) G.shake = Math.min(1, loss / 18); } }
+    G.props && G.props.carHit(this);
+    if (grounded) { if (this.vy < -6 && this === G.player.car) G.shake = Math.max(G.shake, Math.min(0.5, -this.vy / 30)); this.vy = 0; this.grounded = true; } else if (this.grounded && p.y - g < 0.5 && this.vy <= 0) { p.y = g; this.vy = 0; } else this.grounded = false;
+    if (g < -1.2 && p.y < -0.6) { this.vel.multiplyScalar(Math.exp(-3 * dt)); p.y = Math.max(p.y, -1.2); this.vy = Math.max(this.vy, 0); this.grounded = true; }
+    out.box = null; this.sync(dt);
   }
+  // a hit off-centre sets the car spinning
+  spinFrom(x, z, speed) { const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw), dx = x - this.pos.x, dz = z - this.pos.z, side = dx * fz - dz * fx, along = dx * fx + dz * fz; this.av += clamp(-side * along * speed * 0.02, -2.5, 2.5); }
   sync(dt) {
     const r = this.m.root, p = this.pos, fx = Math.sin(this.yaw), fz = Math.cos(this.yaw); r.position.copy(p); r.rotation.y = this.yaw;
     if (this.grounded && dt) {
       const hf = Geo.height(p.x + fx * 1.6, p.z + fz * 1.6), hb = Geo.height(p.x - fx * 1.6, p.z - fz * 1.6), hl = Geo.height(p.x - fz * 0.9, p.z + fx * 0.9), hr = Geo.height(p.x + fz * 0.9, p.z - fx * 0.9);
       if (!out.box) { r.rotation.x = damp(r.rotation.x, -Math.atan2(hf - hb, 3.2), 10, dt); r.rotation.z = damp(r.rotation.z, Math.atan2(hr - hl, 1.8) * -1, 10, dt); }
     } else if (dt) { r.rotation.x += this.launch * dt; }
-    this.m.tilt.rotation.z = damp(this.m.tilt.rotation.z, (this.steer || 0) * this.vf * 0.0035, 6, dt || 0.016);
+    if (dt) { const acc = (this.vf - this.lastVf) / dt; this.lastVf = this.vf; this.pitch = damp(this.pitch, clamp(-acc * 0.004, -0.06, 0.06), 6, dt); this.roll = damp(this.roll, clamp((this.steer || 0) * this.vf * 0.004 + this.av * this.vf * 0.002, -0.09, 0.09), 5, dt); }
+    this.m.tilt.rotation.z = this.roll; this.m.tilt.rotation.x = this.pitch;
     for (const w of this.m.wheels) w.rotation.x += this.vf * (dt || 0) / this.spec.wheel;
+    for (const w of this.m.steer) w.rotation.y = -(this.steer || 0) * 0.45;
+    if (this.m.beam) this.m.beam.visible = G.sky.night > 0.3 && (this === G.player.car || this.pos.distanceToSquared(G.player.pos) < 3600);
     if (this.m.bar) { const on = this.ai === 'cop' && !this.dead && this.emp <= 0, f = Math.floor(G.time * 6) % 2; this.m.bar[0].visible = on && !f; this.m.bar[1].visible = on && !!f; }
   }
-  damage(d) {
-    if (this.dead) return; this.hp -= d;
+  damage(d, x, z) {
+    if (this.dead) return; this.hp -= d * (this.spec.mass > 5000 ? 0.3 : 1);
+    if (x !== undefined && d > 3) { const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw), dx = x - this.pos.x, dz = z - this.pos.z; dent(this.m, dx * fz - dz * fx, 0.7, dx * fx + dz * fz, Math.min(0.32, d * 0.01)); if (d > 12) G.fx.burst(_c.set(x, this.pos.y + 1, z), 0xcfe8ff, 10, 4, 0.6, 0.5, 14, 0.5); }
     if (this.hp <= 0) this.explode();
   }
   explode() {
@@ -95,6 +121,46 @@ export class Car {
     this.vel.set(e[0] * this.vf, 0, e[1] * this.vf);
     this.yaw += angDiff(this.yaw, Math.atan2(e[0], e[1])) * Math.min(1, 5 * dt); this.steer = 0; out.box = null; this.sync(dt);
   }
+  // traffic on a real street network: follow the edge on the correct side, choose a turn at each junction
+  roadInit(e, dir, s) { this.re = e; this.rdir = dir; this.rs = s; this.next = -1; this.ai = 'road'; const R = City.active.r; this.lane = Math.max(1.7, ROAD_W[R.cls[e]] / 4) * (City.active.drive === 'left' ? -1 : 1); this.cruise = [0, 22, 18, 14, 12.5, 11, 8.5, 5, 5][R.cls[e]] * (0.85 + Math.random() * 0.25); City.along(e, s, dir, this.lane, _o); this.pos.set(_o.x, BASE, _o.z); this.yaw = Math.atan2(_o.hx, _o.hz); this.sync(0); }
+  road(dt) {
+    const C = City.active, R = C.r; if (!C || this.re >= R.E) { this.ai = 'none'; return; }
+    const e = this.re, L = R.len[e], end = this.rdir > 0 ? R.nb[e] : R.na[e], left = L - this.rs;
+    if (this.next < 0 && left < 25) {
+      const opts = R.adj[end].filter(x => x !== e); let best = e, bs = -1e9;
+      City.along(e, L - 0.1, this.rdir, 0, _o); const hx = _o.hx, hz = _o.hz;
+      for (const x of opts) { const d2 = R.na[x] === end ? 1 : -1; City.along(x, 2, d2, 0, _p); const dot = hx * _p.hx + hz * _p.hz, sc = dot * 1.2 + Math.random() * 1.4 - (R.cls[x] > 7 ? 1.5 : 0); if (sc > bs) { bs = sc; best = x; } }
+      this.next = best; this.nextDir = R.na[best] === end ? 1 : -1; this.turn = bs;
+    }
+    let target = this.cruise * (this.next >= 0 && this.turn < 0.6 && left < 18 ? 0.45 : 1);
+    // queue behind anything ahead, give way at junctions
+    const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw), look = 6 + this.vf * 1.3, p = this.pos;
+    const block = (q, rad) => { const rx = q.x - p.x, rz = q.z - p.z, f = rx * fx + rz * fz, l = Math.abs(rx * fz - rz * fx); if (f > 0.5 && f < look + this.spec.len / 2 && l < rad && Math.abs(q.y - p.y) < 3) target = Math.min(target, Math.max(0, (f - this.spec.len / 2 - 3) * 0.8)); };
+    for (const c of G.ents.cars) if (c !== this) block(c.pos, 1.6 + c.spec.w / 2);
+    if (G.player.mode === 'foot') block(G.player.pos, 1.5);
+    for (const n of G.ents.npcs) if (!n.dead && n.state !== 'walk') block(n.pos, 1.3);
+    const res = G.ents.junction;
+    if (left < 9) { const holder = res.get(end); if (holder && holder !== this && holder.re !== undefined && G.ents.cars.includes(holder) && holder.pos.distanceToSquared(p) < 900 && (G.time - holder.resT) < 6) target = 0; else { res.set(end, this); this.resT = G.time; } }
+    if (this.frozen > 0 || this.emp > 0) target = 0;
+    this.vf = damp(this.vf, target, target < this.vf ? 5 : 1.1, dt); if (this.frozen > 0) this.vf = 0;
+    this.rs += this.vf * dt;
+    if (this.rs >= L) {
+      if (res.get(end) === this) res.delete(end);
+      if (this.next < 0) { this.rdir = -this.rdir; this.rs = 0; } else { this.rs -= L; this.re = this.next; this.rdir = this.nextDir; this.next = -1; }
+      const cls = R.cls[this.re]; this.lane = Math.max(1.7, ROAD_W[cls] / 4) * (C.drive === 'left' ? -1 : 1); this.cruise = [0, 22, 18, 14, 12.5, 11, 8.5, 5, 5][cls] * (0.85 + Math.random() * 0.25);
+    }
+    City.along(this.re, this.rs, this.rdir, this.lane, _o);
+    const k = 1 - Math.exp(-8 * dt); p.x += (_o.x - p.x) * k; p.z += (_o.z - p.z) * k; p.y = BASE;
+    this.grounded = true; this.vel.set(_o.hx * this.vf, 0, _o.hz * this.vf); this.vy = 0;
+    this.yaw += angDiff(this.yaw, Math.atan2(_o.hx, _o.hz)) * Math.min(1, 6 * dt); this.steer = 0; this.sync(dt);
+  }
+  // nearest street to join after a chase or a crash
+  joinRoad() {
+    const C = City.active; if (!C) return false; const R = C.r; let best = -1, bd = 400, bs = 0;
+    for (const e of C.eOver.get(Math.floor(this.pos.x / CH) + ',' + Math.floor(this.pos.z / CH)) || []) { if (!DIRS_OK(R, e)) continue; for (let j = R.ps[e]; j < R.ps[e + 1] - 1; j++) { const ax = R.v[j * 2], az = R.v[j * 2 + 1], bx = R.v[j * 2 + 2], bz = R.v[j * 2 + 3], dx = bx - ax, dz = bz - az, l = dx * dx + dz * dz, t = clamp(((this.pos.x - ax) * dx + (this.pos.z - az) * dz) / (l || 1), 0, 1), d = (ax + dx * t - this.pos.x) ** 2 + (az + dz * t - this.pos.z) ** 2; if (d < bd) { bd = d; best = e; bs = R.cum[j] + Math.sqrt(l) * t; } } }
+    if (best < 0) return false; const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw); City.along(best, bs, 1, 0, _o); const dir = _o.hx * fx + _o.hz * fz >= 0 ? 1 : -1;
+    this.roadInit(best, dir, dir > 0 ? bs : R.len[best] - bs); return true;
+  }
   // police pursuit: steer at the target, feel for walls, back out when stuck
   pursue(dt, tgt, speedCap) {
     const p = this.pos, dx = tgt.x - p.x, dz = tgt.z - p.z, dist = Math.hypot(dx, dz);
@@ -121,7 +187,9 @@ export class Car {
     if (this.infected > 0 && this.ai !== 'none') {            // hijacked by the virus: drives itself, badly
       this.boost = 1.2; this.drive(dt, 1, Math.sin(G.time * 1.7 + this.gen * 3 + this.pos.x) * 0.8, false);
     } else if (this.ai === 'traffic') this.traffic(dt);
+    else if (this.ai === 'road') this.road(dt);
     else if (this.ai === 'cop') G.wanted.driveCop(this, dt);
+    else if (this.ai === 'leave' && City.inside(this.pos.x, this.pos.z)) { if (!this.joinRoad()) this.ai = 'none'; }
     else if (this.ai === 'leave') { this.ai = 'traffic'; this.dir = Math.round(((Math.atan2(Math.sin(this.yaw), Math.cos(this.yaw)) / (Math.PI / 2)) % 4 + 4)) % 4; this.dir = [1, 0, 3, 2][this.dir]; this.snapToLane(); }
     else this.drive(dt, 0, 0, this.grounded && !this.occupied && Math.abs(this.vf) < 3);
   }
@@ -130,15 +198,9 @@ export class Car {
 }
 
 // ================= people =================
-const LOOK = {
-  ped: () => ({ suit: new THREE.Color().setHSL(Math.random(), 0.35, 0.3 + Math.random() * 0.35), second: new THREE.Color().setHSL(0.6, 0.2, 0.15 + Math.random() * 0.25), head: [0xe8b98f, 0xc68e62, 0x8d5a3a, 0xf1cfae][Math.random() * 4 | 0], accent: 0x22252a, scale: 0.92 + Math.random() * 0.14 }),
-  thug: () => ({ suit: 0x23242a, second: 0x3a1418, head: 0xc9a07a, accent: 0xff2a3a, accentGlow: 1.6, visor: true, scale: 1.02 }),
-  heavy: () => ({ suit: 0x3a1418, second: 0x16171b, head: 0x2a2a2e, accent: 0xff2a3a, accentGlow: 2, visor: true, scale: 1.28 }),
-  cop: () => ({ suit: 0x18284a, second: 0x0e1626, head: 0xd9ac84, accent: 0xd8c060, hat: true, scale: 1 }),
-};
 export class NPC {
   constructor(kind, x, z, heavy) {
-    this.kind = kind; this.heavy = heavy; this.rig = makeRig(LOOK[heavy ? 'heavy' : kind]()); G.scene.add(this.rig.root);
+    this.kind = kind; this.heavy = heavy; this.rig = makeRig(kind === 'ped' ? civilianLook(G.ents.regKey) : kind === 'cop' ? copLook(G.ents.regKey) : thugLook(heavy)); G.scene.add(this.rig.root);
     this.pos = V().set(x, Geo.height(x, z), z); this.vel = V(); this.yaw = Math.random() * TAU; this.hp = this.maxHp = heavy ? 220 : kind === 'ped' ? 40 : kind === 'thug' ? 90 : 80;
     this.state = 'walk'; this.t = 0; this.cool = 1 + Math.random(); this.gun = kind === 'cop' || (kind === 'thug' && !heavy && Math.random() < 0.35);
     this.frozen = 0; this.webbed = 0; this.infected = 0; this.gen = 0; this.burning = 0; this.dead = false; this.deadT = 0; this.punch = 0; this.side = 1; this.grounded = true;
@@ -232,7 +294,16 @@ export class NPC {
   }
   // stroll along pavements, turning at corners
   wander(dt, speed) {
-    const p = this.pos, ch = G.world.chunkAt(p.x, p.z);
+    const p = this.pos;
+    if (City.active && City.inside(p.x, p.z)) {
+      // walk the pavement of a real street, choosing a new street at each corner
+      const R = City.active.r;
+      if (!this.path || this.path.e >= R.E) { const s = G.ents.cityWalkSpot(0, 25); if (!s) { this.moveTo(p.x, p.z, 0, dt); return; } this.path = { e: s.e, dir: s.dir, s: s.s, side: s.side }; }
+      const w = this.path; w.s += speed * dt;
+      if (w.s > R.len[w.e]) { const end = w.dir > 0 ? R.nb[w.e] : R.na[w.e], opts = R.adj[end].filter(x => x !== w.e); if (opts.length) { const n = opts[Math.random() * opts.length | 0]; w.dir = R.na[n] === end ? 1 : -1; w.e = n; w.side = Math.sign(w.side) * (ROAD_W[R.cls[n]] / 2 + 1.7); } else w.dir = -w.dir; w.s = 0; }
+      City.along(w.e, w.s, w.dir, w.side, _o); this.moveTo(_o.x, _o.z, speed, dt); return;
+    }
+    const ch = G.world.chunkAt(p.x, p.z);
     if (!ch || !ch.urban) { this.moveTo(p.x + Math.sin(this.yaw) * 5, p.z + Math.cos(this.yaw) * 5, speed, dt); if (Math.random() < dt * 0.3) this.yaw += (Math.random() - 0.5) * 2; return; }
     const ax = this.axis, a = ax ? p.z : p.x, c = ax ? p.x : p.z, line = roadLine(c), side = c >= line ? 1 : -1, want = line + side * 9;
     const tx = ax ? want : a + this.sgn * 6, tz = ax ? a + this.sgn * 6 : want; this.moveTo(tx, tz, speed, dt);
@@ -244,7 +315,26 @@ const SHELL = new THREE.CapsuleGeometry(0.5, 1.1, 3, 8);
 
 // ================= manager =================
 export class Ents {
-  constructor(q) { this.q = q; this.npcs = []; this.cars = []; this.gangs = []; this.spawnT = 0; this.gangT = 12; }
+  constructor(q) { this.q = q; this.npcs = []; this.cars = []; this.gangs = []; this.spawnT = 0; this.gangT = 12; this.junction = new Map(); }
+  get regKey() { const ch = G.world.chunkAt(G.player.pos.x, G.player.pos.z); return ch ? ch.regKey : 'europe'; }
+  // a random drivable spot in a ring around the player, on a real street
+  cityRoadSpot(minR, maxR) {
+    const C = City.active, R = C.r, pl = G.player.pos, cx = Math.floor(pl.x / CH), cz = Math.floor(pl.z / CH), r = Math.ceil(maxR / CH);
+    if (!this.candKey || this.candKey !== cx + ',' + cz + ',' + r) { this.candKey = cx + ',' + cz + ',' + r; this.cand = []; for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) for (const e of C.eHome.get((cx + i) + ',' + (cz + j)) || []) if (DIRS_OK(R, e)) this.cand.push(e); }
+    const cand = this.cand; if (!cand.length) return null;
+    for (let i = 0; i < 24; i++) {
+      const e = cand[Math.random() * cand.length | 0], dir = Math.random() < 0.5 ? 1 : -1, s0 = 4 + Math.random() * (R.len[e] - 8); City.along(e, s0, dir, 0, _o);
+      const d = Math.hypot(_o.x - pl.x, _o.z - pl.z); if (d < minR || d > maxR) continue;
+      let clear = true; for (const c of this.cars) if (Math.abs(c.pos.x - _o.x) + Math.abs(c.pos.z - _o.z) < 16) clear = false;
+      if (clear) return { e, dir, s: s0, x: _o.x, z: _o.z };
+    }
+    return null;
+  }
+  cityWalkSpot(minR, maxR) {
+    const s = this.cityRoadSpot(minR, maxR); if (!s) return null; const R = City.active.r, side = (Math.random() < 0.5 ? 1 : -1) * (ROAD_W[R.cls[s.e]] / 2 + 1.7);
+    City.along(s.e, s.s, s.dir, side, _o); return { x: _o.x, z: _o.z, e: s.e, dir: s.dir, s: s.s, side };
+  }
+  carType() { const list = region(this.regKey).cars; return list[Math.random() * list.length | 0]; }
   nearest(p, r, filter) { let best = null, bd = r * r; for (const n of this.npcs) { if (n.dead || (filter && !filter(n))) continue; const d = n.pos.distanceToSquared(p); if (d < bd) { bd = d; best = n; } } return best; }
   inRange(p, r, cb) { const r2 = r * r; for (const n of this.npcs) if (!n.dead && n.pos.distanceToSquared(p) < r2) cb(n); }
   carsIn(p, r, cb) { const r2 = r * r; for (const c of this.cars) if (c.pos.distanceToSquared(p) < r2) cb(c); }
@@ -253,6 +343,7 @@ export class Ents {
   blast(p, r, dmg, knock, skipCar, status) {
     this.inRange(p, r, n => { const d = _a.subVectors(n.pos, p); d.y = 0; const l = d.length() || 1; d.multiplyScalar(1 / l); n.hit(dmg * (1 - l / r * 0.6), d, knock, 'player'); if (status === 'burn') n.burning = 5; });
     this.carsIn(p, r, c => { if (c === skipCar || c === G.player.car) return; const d = _a.subVectors(c.pos, p); d.y = 0; d.normalize(); c.vel.addScaledVector(d, knock * 0.9); c.vy = knock * 0.6; c.grounded = false; c.launch = (Math.random() - 0.5) * 5; if (c.ai === 'traffic') c.ai = 'none'; c.damage(dmg * 0.9); });
+    G.props && G.props.blast(p, r * 1.2, knock * 1.4);
     this.panic(p, r * 3);
   }
   roadSpot(minR, maxR) {
@@ -276,7 +367,11 @@ export class Ents {
     }
     return null;
   }
-  addCar(type, color, police, spot) { const c = new Car(type, color, police); c.place(spot.x, spot.z, spot.dir); this.cars.push(c); return c; }
+  addCar(type, color, police, spot) {
+    const c = new Car(type, color, police ? region(this.regKey).police : false, this.regKey);
+    if (spot.e !== undefined) c.roadInit(spot.e, spot.dir, spot.s); else c.place(spot.x, spot.z, spot.dir);
+    this.cars.push(c); return c;
+  }
   addNPC(kind, x, z, heavy) { const n = new NPC(kind, x, z, heavy); this.npcs.push(n); return n; }
   spawnGang() {
     const s = this.walkSpot(55, 110); if (!s) return; const g = { members: [], x: s.x, z: s.z }, n = 4 + (Math.random() * 3 | 0);
@@ -284,15 +379,15 @@ export class Ents {
     this.gangs.push(g); G.ui.toast('Syndicate crew spotted nearby', 'They are marked red on your radar');
   }
   update(dt) {
-    const pl = G.player.pos, urban = G.world.isRoadChunk(pl.x, pl.z);
+    const pl = G.player.pos, real = City.inside(pl.x, pl.z, -50), urban = real || G.world.isRoadChunk(pl.x, pl.z);
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
       this.spawnT = 0.25;
-      const traffic = this.cars.filter(c => c.ai === 'traffic').length, peds = this.npcs.filter(n => n.kind === 'ped').length;
-      if (urban && traffic < this.q.cars) { const s = this.roadSpot(70, 190); if (s) { const r = Math.random(); this.addCar(r < 0.6 ? 'sedan' : r < 0.8 ? 'sport' : 'van', CAR_COLORS[Math.random() * CAR_COLORS.length | 0], false, s); } }
-      if (urban && peds < this.q.peds) { const s = this.walkSpot(35, 120); if (s) this.addNPC('ped', s.x, s.z); }
-      for (let i = this.cars.length - 1; i >= 0; i--) { const c = this.cars[i], d = c.pos.distanceTo(pl); if (c !== G.player.car && (d > 260 || (c.dead && c.deadT > 25) || (c.ai === 'none' && !c.touched && d > 140))) { c.remove(); this.cars.splice(i, 1); } }
-      for (let i = this.npcs.length - 1; i >= 0; i--) { const n = this.npcs[i], d = n.pos.distanceTo(pl); if (d > (n.kind === 'thug' ? 260 : 190) || (n.dead && n.deadT > 9) || (n.kind === 'cop' && G.wanted.level === 0 && d > 70)) { n.remove(); this.npcs.splice(i, 1); } }
+      const traffic = this.cars.filter(c => c.ai === 'traffic' || c.ai === 'road').length, peds = this.npcs.filter(n => n.kind === 'ped').length;
+      if (urban && traffic < this.q.cars * (real ? 1.4 : 1)) { const s = real ? this.cityRoadSpot(60, 180) : this.roadSpot(70, 190); if (s) this.addCar(this.carType(), PAINT[Math.random() * PAINT.length | 0], false, s); }
+      if (urban && peds < this.q.peds * (real ? 1.5 : 1)) { const s = real ? this.cityWalkSpot(30, 110) : this.walkSpot(35, 120); if (s) { const n = this.addNPC('ped', s.x, s.z); if (s.e !== undefined) n.path = { e: s.e, dir: s.dir, s: s.s, side: s.side }; } }
+      for (let i = this.cars.length - 1; i >= 0; i--) { const c = this.cars[i], d = Math.hypot(c.pos.x - pl.x, c.pos.z - pl.z); if (c !== G.player.car && (d > (real ? 230 : 260) || (c.dead && c.deadT > 25) || (c.ai === 'none' && !c.touched && d > 140))) { c.remove(); this.cars.splice(i, 1); } }
+      for (let i = this.npcs.length - 1; i >= 0; i--) { const n = this.npcs[i], d = Math.hypot(n.pos.x - pl.x, n.pos.z - pl.z); if (d > (n.kind === 'thug' ? 260 : 190) || (n.dead && n.deadT > 9) || (n.kind === 'cop' && G.wanted.level === 0 && d > 70)) { n.remove(); this.npcs.splice(i, 1); } }
       for (let i = this.gangs.length - 1; i >= 0; i--) { const g = this.gangs[i], alive = g.members.filter(m => !m.dead && this.npcs.includes(m)); if (!alive.length) { if (g.members.some(m => m.dead)) G.onGangCleared(); this.gangs.splice(i, 1); } else { g.x = alive[0].pos.x; g.z = alive[0].pos.z; } }
     }
     this.gangT -= dt; if (this.gangT <= 0 && urban) { this.gangT = 45 + Math.random() * 40; if (!this.gangs.length && G.wanted.level < 3) this.spawnGang(); }
@@ -303,14 +398,8 @@ export class Ents {
     for (let i = 0; i < cs.length; i++) {
       const a = cs[i];
       for (let j = i + 1; j < cs.length; j++) {
-        const b = cs[j], dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, d2 = dx * dx + dz * dz; if (d2 > 9.6 || Math.abs(a.pos.y - b.pos.y) > 2) continue;
-        const d = Math.sqrt(d2) || 0.01, nx = dx / d, nz = dz / d, pen = 3.1 - d, rel = (a.vel.x - b.vel.x) * nx + (a.vel.z - b.vel.z) * nz;
-        a.pos.x -= nx * pen * 0.5; a.pos.z -= nz * pen * 0.5; b.pos.x += nx * pen * 0.5; b.pos.z += nz * pen * 0.5;
-        if (rel > 0) {
-          a.vel.x -= nx * rel * 0.6; a.vel.z -= nz * rel * 0.6; b.vel.x += nx * rel * 0.6; b.vel.z += nz * rel * 0.6;
-          if (rel > 5) { const dmg = rel * 1.3; a.damage(dmg * (a === G.player.car ? 0.5 : 1)); b.damage(dmg * (b === G.player.car ? 0.5 : 1)); G.audio.crash(a.pos, rel); for (const c of [a, b]) { if (c.ai === 'traffic') { c.ai = 'none'; c.touched = true; } } if (a === G.player.car || b === G.player.car) { G.shake = Math.min(1, rel / 18); const o = a === G.player.car ? b : a; if (o.police) G.wanted.crime(0.6); } }
-          if (a.infected > 0 && b.infected <= 0 && a.gen < 5) { b.infected = 9; b.gen = a.gen + 1; G.stats.infected++; } else if (b.infected > 0 && a.infected <= 0 && b.gen < 5) { a.infected = 9; a.gen = b.gen + 1; G.stats.infected++; }
-        }
+        const b = cs[j], reach = (a.spec.len + b.spec.len) / 2 + 0.5; if (Math.abs(b.pos.x - a.pos.x) > reach || Math.abs(b.pos.z - a.pos.z) > reach || Math.abs(a.pos.y - b.pos.y) > 2.2) continue;
+        contact(a, b);
       }
       const sp = Math.hypot(a.vel.x, a.vel.z); if (sp < 4) continue;
       for (const n of this.npcs) {
@@ -323,6 +412,38 @@ export class Ents {
   clear() { for (const c of this.cars) c.remove(); for (const n of this.npcs) n.remove(); this.cars.length = 0; this.npcs.length = 0; this.gangs.length = 0; }
 }
 
+// car against car: each body is a row of circles; resolve the deepest overlap with an impulse
+// that respects both masses and the lever arm, so glancing blows spin cars and buses barely notice hatchbacks
+function contact(a, b) {
+  const fa = [Math.sin(a.yaw), Math.cos(a.yaw)], fb = [Math.sin(b.yaw), Math.cos(b.yaw)], ra = a.spec.w / 2, rb = b.spec.w / 2;
+  let best = null;
+  for (let i = 0; i < a.circ; i++) {
+    const oa = a.circ === 1 ? 0 : -(a.spec.len / 2 - ra) + (a.spec.len - 2 * ra) * i / (a.circ - 1), ax = a.pos.x + fa[0] * oa, az = a.pos.z + fa[1] * oa;
+    for (let j = 0; j < b.circ; j++) {
+      const ob = b.circ === 1 ? 0 : -(b.spec.len / 2 - rb) + (b.spec.len - 2 * rb) * j / (b.circ - 1), bx = b.pos.x + fb[0] * ob, bz = b.pos.z + fb[1] * ob;
+      const dx = bx - ax, dz = bz - az, d2 = dx * dx + dz * dz, rr = ra + rb; if (d2 >= rr * rr) continue;
+      const d = Math.sqrt(d2) || 0.01, pen = rr - d; if (!best || pen > best.pen) best = { pen, nx: dx / d, nz: dz / d, cx: ax + dx / d * ra, cz: az + dz / d * ra };
+    }
+  }
+  if (!best) return;
+  const { pen, nx, nz, cx, cz } = best, ma = a.spec.mass * (a === G.player.car ? 1.6 : 1), mb = b.spec.mass * (b === G.player.car ? 1.6 : 1), sa = mb / (ma + mb);
+  a.pos.x -= nx * pen * sa; a.pos.z -= nz * pen * sa; b.pos.x += nx * pen * (1 - sa); b.pos.z += nz * pen * (1 - sa);
+  for (const c of [a, b]) if (c.ai === 'traffic' || c.ai === 'road') { c.ai = 'none'; c.touched = true; c.vel.set(Math.sin(c.yaw) * c.vf, 0, Math.cos(c.yaw) * c.vf); }
+  const rax = cx - a.pos.x, raz = cz - a.pos.z, rbx = cx - b.pos.x, rbz = cz - b.pos.z;
+  const vax = a.vel.x + a.av * raz, vaz = a.vel.z - a.av * rax, vbx = b.vel.x + b.av * rbz, vbz = b.vel.z - b.av * rbx;
+  const rel = (vax - vbx) * nx + (vaz - vbz) * nz; if (rel <= 0) return;
+  const Ia = ma * (a.spec.len ** 2 + a.spec.w ** 2) / 12, Ib = mb * (b.spec.len ** 2 + b.spec.w ** 2) / 12, ca = raz * nx - rax * nz, cb = rbz * nx - rbx * nz;
+  const J = (1 + 0.25) * rel / (1 / ma + 1 / mb + ca * ca / Ia + cb * cb / Ib);
+  a.vel.x -= J * nx / ma; a.vel.z -= J * nz / ma; b.vel.x += J * nx / mb; b.vel.z += J * nz / mb;
+  a.av -= J * ca / Ia; b.av += J * cb / Ib;
+  if (rel > 4) {
+    a.damage(J / ma * 1.6 * (a === G.player.car ? 0.6 : 1), cx, cz); b.damage(J / mb * 1.6 * (b === G.player.car ? 0.6 : 1), cx, cz); G.audio.crash(a.pos, rel);
+    G.fx.burst(_c.set(cx, a.pos.y + 0.8, cz), 0xffd890, Math.min(30, rel * 2) | 0, rel * 0.5, 0.35, 0.6, 14, 0.4);
+    if (a === G.player.car || b === G.player.car) { G.shake = Math.min(1, rel / 16); const o = a === G.player.car ? b : a; if (o.police) G.wanted.crime(0.6); else if (rel > 7) G.wanted.crime(0.3); }
+  }
+  if (a.infected > 0 && b.infected <= 0 && a.gen < 5) { b.infected = 9; b.gen = a.gen + 1; G.stats.infected++; } else if (b.infected > 0 && a.infected <= 0 && b.gen < 5) { a.infected = 9; a.gen = b.gen + 1; G.stats.infected++; }
+}
+
 // ================= wanted =================
 export class Wanted {
   constructor() { this.heat = 0; this.level = 0; this.state = 'none'; this.seen = false; this.unseen = 0; this.searchT = 0; this.last = V(); this.checkT = 0; this.spawnT = 0; this.heli = null; }
@@ -333,7 +454,7 @@ export class Wanted {
   }
   clearAll(msg = true) {
     if (this.level && msg) G.ui.toast('You lost them', 'Wanted level cleared'); this.heat = 0; this.level = 0; this.state = 'none'; this.seen = false; G.audio.siren(false);
-    for (const c of G.ents.cars) if (c.ai === 'cop') c.ai = G.world.isRoadChunk(c.pos.x, c.pos.z) ? 'leave' : 'none';
+    for (const c of G.ents.cars) if (c.ai === 'cop') c.ai = G.world.isRoadChunk(c.pos.x, c.pos.z) || City.inside(c.pos.x, c.pos.z) ? 'leave' : 'none';
     if (this.heli) this.heli.leave = true;
   }
   driveCop(c, dt) {
@@ -363,9 +484,9 @@ export class Wanted {
     // reinforcements arrive by road, out of sight where possible
     this.spawnT -= dt; const units = E.cars.filter(c => c.ai === 'cop').length + E.npcs.filter(n => n.kind === 'cop' && !n.dead).length / 2;
     if (this.spawnT <= 0 && units < this.level + (this.level > 2 ? 1 : 0)) {
-      this.spawnT = 3.5; let s = E.roadSpot(110, 190);
+      this.spawnT = 3.5; let s = City.inside(pl.pos.x, pl.pos.z) ? E.cityRoadSpot(110, 190) : E.roadSpot(110, 190);
       if (!s) { const a = Math.random() * TAU; s = { x: pl.pos.x + Math.sin(a) * 150, z: pl.pos.z + Math.cos(a) * 150, dir: 0 }; if (Geo.height(s.x, s.z) < 0.5) s = null; }
-      if (s) { const c = E.addCar(this.level > 3 ? 'sport' : 'sedan', 0xf4f4f0, true, s); c.ai = 'cop'; c.hp = 140; c.yaw = Math.atan2(pl.pos.x - s.x, pl.pos.z - s.z); }
+      if (s) { const reg = E.regKey, c = E.addCar(this.level > 3 ? 'sport' : reg === 'india' || reg === 'gulf' ? 'suv' : reg === 'uk' ? 'hatch' : 'sedan', 0xf4f4f0, true, s); c.ai = 'cop'; c.hp = 140; c.yaw = Math.atan2(pl.pos.x - s.x, pl.pos.z - s.z); }
     }
     if (this.level >= 4 && !this.heli) this.spawnHeli();
     if (this.heli) this.updateHeli(dt);

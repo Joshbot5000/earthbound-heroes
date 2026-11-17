@@ -40,7 +40,9 @@ function climate(lat, lon, ms) {
   const doy = (ms / 86400000) % 365.25, season = cos((doy - 200) / 365.25 * 6.283) * Math.sign(lat || 1);
   const e = Geo.elev(lat, lon), c = Geo.color(lat, lon, [0, 0, 0]);
   const hourLocal = ((ms / 3600000 + lon / 15) % 24 + 24) % 24;
-  let temp = 29 - 48 * Math.pow(Math.abs(sin(rad(lat))), 1.6) + season * 16 * Math.abs(lat) / 70 - e * 30 + 4 * cos((hourLocal - 15) / 24 * 6.283);
+  // annual mean falls with latitude; the seasonal swing grows with it (fits London ~11 C mean, +-7)
+  const al = Math.abs(lat), mean = 28 - 0.45 * Math.max(0, al - 20) - 0.004 * Math.max(0, al - 20) ** 2, amp = 0.18 * Math.max(0, al - 10);
+  let temp = mean + season * amp - e * 22 + 3 * cos((hourLocal - 15) / 24 * 6.283);
   const wet = clamp((c[1] - Math.max(c[0], c[2] * 0.8)) * 6 + 0.35, 0.05, 0.9);
   const slot = Math.floor(ms / 10800000), a = hash2(Math.round(lat * 2), Math.round(lon * 2), slot), b = hash2(Math.round(lat * 2), Math.round(lon * 2), slot + 7);
   const w = { label: 'Clear', cloud: clamp(b * wet * 1.6, 0, 1), rain: 0, snow: 0, fog: 0, thunder: 0, temp: Math.round(temp), wind: 1 + b * 7, live: false };
@@ -75,7 +77,7 @@ export class SkySystem {
     const u = this.sky.material.uniforms; u.mieCoefficient.value = 0.004; u.mieDirectionalG.value = 0.82;
     this.sun = new THREE.DirectionalLight(0xffffff, 3); this.sun.castShadow = true;
     const S = mobile ? 90 : 150, sh = this.sun.shadow;
-    sh.mapSize.setScalar(mobile ? 1024 : 2048); sh.camera.left = -S; sh.camera.right = S; sh.camera.top = S; sh.camera.bottom = -S;
+    sh.mapSize.setScalar(mobile ? 1024 : 2048); sh.camera.far = 1200; sh.camera.left = -S; sh.camera.right = S; sh.camera.top = S; sh.camera.bottom = -S;
     sh.camera.near = 1; sh.camera.far = 900; sh.bias = -0.0004; sh.normalBias = 0.6;
     scene.add(this.sun, this.sun.target);
     this.hemi = new THREE.HemisphereLight(0xbfd8ff, 0x4a4438, 1); scene.add(this.hemi);
@@ -95,9 +97,9 @@ export class SkySystem {
     const vs = (pt) => `uniform float uT; uniform vec3 uCam; uniform vec3 uVel; uniform float uLen; attribute float aEnd; varying float vA;
       void main(){ vec3 box=vec3(70.,50.,70.); vec3 p=position*box + uVel*uT; ${pt ? 'p.x+=sin(uT*1.3+position.y*40.)*1.5;' : ''}
       p=mod(p-uCam,box)-box*.5; vA=1.-smoothstep(20.,35.,length(p)); p+=uCam; p-=normalize(uVel)*aEnd*uLen;
-      gl_Position=projectionMatrix*viewMatrix*vec4(p,1.); ${pt ? 'gl_PointSize=min(6., 90./gl_Position.w);' : ''} }`;
-    const fs = `uniform float uA; uniform vec3 uCol; varying float vA; void main(){ gl_FragColor=vec4(uCol, uA*vA); }`;
-    const mk = pt => new THREE.ShaderMaterial({ vertexShader: vs(pt), fragmentShader: fs, transparent: true, depthWrite: false,
+      gl_Position=projectionMatrix*viewMatrix*vec4(p,1.); ${pt ? 'gl_PointSize=clamp(40./gl_Position.w, 1.0, 3.5);' : ''} }`;
+    const fs = pt2 => `uniform float uA; uniform vec3 uCol; varying float vA; void main(){ float a = 1.0; ${pt2 ? 'a = smoothstep(0.5, 0.15, length(gl_PointCoord - 0.5));' : ''} gl_FragColor=vec4(uCol, uA*vA*a); }`;
+    const mk = pt => new THREE.ShaderMaterial({ vertexShader: vs(pt), fragmentShader: fs(pt), transparent: true, depthWrite: false,
       uniforms: { uT: { value: 0 }, uCam: { value: new THREE.Vector3() }, uVel: { value: new THREE.Vector3(0, -30, 0) }, uLen: { value: 0.9 }, uA: { value: 0 }, uCol: { value: new THREE.Color(0xaec4dd) } } });
     this.rain = new THREE.LineSegments(pg, mk(false)); this.snow = new THREE.Points(pg, mk(true));
     this.snow.material.uniforms.uCol.value.set(0xffffff); this.snow.material.uniforms.uLen.value = 0;
@@ -134,22 +136,24 @@ export class SkySystem {
     const useMoon = alt < -0.06 && sm.moon.alt > 0.03, dir = useMoon ? sm.moon.dir : sm.sun.dir;
     const warm = smooth(0.45, 0.02, alt);
     this.sun.color.setRGB(1, lerp(0.96, 0.62, warm), lerp(0.9, 0.36, warm));
-    let inten = smooth(-0.04, 0.3, alt) * 3.4 * dim;
+    let inten = smooth(-0.04, 0.3, alt) * 3.9 * dim;
     if (useMoon) { this.sun.color.setRGB(0.55, 0.68, 1); inten = 0.22 * sm.phase * (1 - c.cloud * 0.7) * smooth(0.03, 0.3, sm.moon.alt); }
     this.sun.intensity = inten; this.sun.castShadow = inten > 0.05;
     const tgt = G.player ? G.player.pos : cam.position;
     this.sun.target.position.copy(tgt); this.sun.position.copy(tgt).addScaledVector(dir.y > 0.05 ? dir : new THREE.Vector3(dir.x, 0.05, dir.z).normalize(), 400);
     this.flash = Math.max(0, this.flash - dt * 4);
     if (w.thunder && Math.random() < dt * 0.12) { this.flash = 1; G.audio && G.audio.thunder(); }
-    this.hemi.intensity = lerp(0.1, 1.15, dayF) * lerp(1, 0.7, c.cloud) + this.flash * 4;
-    this.hemi.color.setRGB(lerp(0.3, 0.75, dayF), lerp(0.4, 0.85, dayF), 1); this.hemi.groundColor.setRGB(0.29 * dayF + 0.08, 0.26 * dayF + 0.07, 0.22 * dayF + 0.07);
+    const glow = this.cityGlow || 0;   // light pollution: cities never go fully dark
+    this.hemi.intensity = lerp(0.22 + glow * 0.55, 0.95, dayF) * lerp(1, 0.75, c.cloud * dayF) + this.flash * 4;
+    this.hemi.color.setRGB(lerp(0.36 + glow * 0.25, 0.75, dayF), lerp(0.42 + glow * 0.12, 0.85, dayF), lerp(1 - glow * 0.25, 1, dayF)); this.hemi.groundColor.setRGB(0.29 * dayF + 0.1 + glow * 0.22, 0.26 * dayF + 0.08 + glow * 0.14, 0.22 * dayF + 0.08 + glow * 0.05);
     // fog and haze take the horizon colour
     const f = this.scene.fog, grey = 0.55 * dayF + 0.03;
-    const r = lerp(lerp(0.02, 0.56, dayF), grey, c.cloud * 0.8) + warm * dayF * 0.25, g = lerp(lerp(0.03, 0.7, dayF), grey, c.cloud * 0.8) + warm * dayF * 0.05, b = lerp(lerp(0.07, 0.9, dayF), grey * 1.05, c.cloud * 0.8) - warm * dayF * 0.15;
+    const ng = (this.cityGlow || 0) * (1 - dayF);
+    const r = lerp(lerp(0.02 + ng * 0.16, 0.56, dayF), grey, c.cloud * 0.8) + warm * dayF * 0.25, g = lerp(lerp(0.03 + ng * 0.1, 0.7, dayF), grey, c.cloud * 0.8) + warm * dayF * 0.05, b = lerp(lerp(0.07 + ng * 0.06, 0.9, dayF), grey * 1.05, c.cloud * 0.8) - warm * dayF * 0.15;
     f.color.setRGB(r + this.flash, g + this.flash, b + this.flash);
     f.density = 0.00013 + c.cloud * 0.00008 + c.rain * 0.0007 + c.snow * 0.0012 + c.fog * 0.006;
-    this.renderer.toneMappingExposure = lerp(0.62, 0.42, dayF);
-    this.scene.environmentIntensity = lerp(0.18, 0.9, dayF) * dim;
+    this.renderer.toneMappingExposure = lerp(0.75, 0.4, dayF);
+    this.scene.environmentIntensity = lerp(0.25, 0.7, dayF) * (0.5 + 0.5 * dim);
     // precipitation
     const wind = w.wind, p = (o, a, vy, len) => {
       o.visible = a > 0.02; if (!o.visible) return; const m = o.material.uniforms;

@@ -4,8 +4,9 @@ import * as THREE from 'three';
 import { G, clamp, lerp, damp, angDiff } from './util.js';
 import { Geo } from './geo.js';
 import { makeRig, animateRig, setRigOpacity } from './rig.js';
+import { nearestWall } from './solid.js';
 
-const V = () => new THREE.Vector3(), _a = V(), _b = V(), _c = V(), _d = V(), out = {}, hit = {};
+const V = () => new THREE.Vector3(), _a = V(), _b = V(), _c = V(), _d = V(), out = {}, hit = {}, _w = {};
 const GRAV = 26;
 
 export class Player {
@@ -38,10 +39,7 @@ export class Player {
     let best = null, bs = 1e9;
     G.world.forBoxes(p.x - 80, p.z - 80, p.x + 80, p.z + 80, b => {
       if (b.maxy < p.y + 12) return;
-      let x = clamp(T.x, b.minx, b.maxx), z = clamp(T.z, b.minz, b.maxz); const y = clamp(T.y, Math.max(b.miny, p.y + 11), b.maxy - 0.5);
-      if (x > b.minx && x < b.maxx && z > b.minz && z < b.maxz) {       // inside the footprint: attach to the nearest face
-        const a = x - b.minx, c = b.maxx - x, e = z - b.minz, f = b.maxz - z, m = Math.min(a, c, e, f); if (m === a) x = b.minx; else if (m === c) x = b.maxx; else if (m === e) z = b.minz; else z = b.maxz;
-      }
+      nearestWall(b, T.x, T.z, _w); const x = _w.x, z = _w.z, y = clamp(T.y, Math.max(b.miny, p.y + 11), b.maxy - 0.5);
       const dx = x - p.x, dy = y - p.y, dz = z - p.z, d = Math.hypot(dx, dy, dz); if (d < 13 || d > 95) return;
       const ahead = dx * dir.x + dz * dir.z, s = Math.hypot(x - T.x, y - T.y, z - T.z) + (ahead < 2 ? 60 : 0) + (dy < 16 ? 20 : 0);
       if (s < bs) { bs = s; best = [x, y, z]; }
@@ -86,6 +84,7 @@ export class Player {
     const { tgt } = this.pending; this.pending = null; const f = _a.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)), last = this.combo === 2;
     let dmg = (last ? 42 : 24) * (this.hero.melee || 1); if (this.invisible) { dmg *= 3; G.powers.uncloak(); }
     if (tgt && !tgt.dead && tgt.pos.distanceTo(this.pos) < 2.9) { tgt.hit(dmg, f, last ? 10 : 0, 'player'); G.audio.hit(this.pos, 1); G.shake = Math.max(G.shake, last ? 0.35 : 0.15); if (last) G.fx.ring(_c.copy(tgt.pos).setY(tgt.pos.y + 1), this.hero.rope, 3, 0.25); }
+    else if (G.props.punch(this.pos, _c.copy(f).multiplyScalar(1.4), last ? 14 : 8)) G.shake = Math.max(G.shake, 0.2);
     else for (const c of G.ents.cars) { _c.subVectors(c.pos, this.pos); if (_c.length() < 3.4 && _c.dot(f) > 0) { c.vel.addScaledVector(f, last ? 9 : 4); c.damage(last ? 22 : 12); if (c.ai === 'traffic') { c.ai = 'none'; c.touched = true; } G.audio.crash(c.pos, 8); G.wanted.crime(0.4); break; } }
   }
   // ---------- per-frame ----------
@@ -183,6 +182,7 @@ export class Player {
     G.audio.wind(v.length(), grounded);
   }
   updateCamera(dt) {
+    if (G.debugCam) { const c = G.debugCam; G.camera.position.set(c[0], c[1], c[2]); G.camera.lookAt(c[3], c[4], c[5]); return; }
     const cam = G.camera, car = this.mode === 'car', sp = this.vel.length();
     _a.copy(this.pos).setY(this.pos.y + (car ? 1.5 : 1.6)); this.camT.lerp(_a, 1 - Math.exp(-(car ? 14 : 22) * dt)); if (this.camT.distanceTo(_a) > 12) this.camT.copy(_a);
     const cp = Math.cos(this.camPitch), dir = _b.set(Math.sin(this.camYaw) * cp, Math.sin(this.camPitch), Math.cos(this.camYaw) * cp);

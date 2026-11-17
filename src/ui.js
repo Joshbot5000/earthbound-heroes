@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { G, clamp, rad, isTouch } from './util.js';
 import { Geo, BLOCK, CH } from './geo.js';
 import { HEROES } from './powers.js';
+import { City } from './city.js';
+import { Landmarks } from './landmarks.js';
 
 const $ = id => document.getElementById(id);
 const KEYS = { KeyW: 'up', ArrowUp: 'up', KeyS: 'dn', ArrowDown: 'dn', KeyA: 'lf', ArrowLeft: 'lf', KeyD: 'rt', ArrowRight: 'rt', Space: 'jump', ShiftLeft: 'sprint', ShiftRight: 'sprint',
@@ -96,7 +98,8 @@ export class UI {
     pr.style.display = (near || car) && !this.touch ? 'block' : 'none'; pr.textContent = car ? 'F · Leave car    E · Leap out' : 'F · Drive';
     const lat = Geo.toLat(p.pos.z), lon = Geo.toLon(p.pos.x), nc = Geo.nearestCity(lat, lon), c = nc.city, sea = Geo.land(lat, lon) < 0.5;
     const inCity = c && nc.km < Geo.cityRadiusKm(c[3]);
-    $('place').textContent = !c ? (sea ? 'Open ocean' : 'Wilderness') : inCity ? `${c[0]}, ${c[4]}` : `${sea ? 'At sea · ' : ''}${nc.km < 10 ? nc.km.toFixed(1) : Math.round(nc.km)} km from ${c[0]}`;
+    const real = City.inside(p.pos.x, p.pos.z), street = real ? City.roadName(p.pos.x, p.pos.z) : '', lm = Landmarks.nearest(p.pos.x, p.pos.z, 160);
+    $('place').textContent = real ? `${lm || street || (City.maskAt(p.pos.x, p.pos.z) === 0 ? 'River' : City.active.name)} · ${City.active.name}` : !c ? (sea ? 'Open ocean' : 'Wilderness') : inCity ? `${lm ? lm + ' · ' : ''}${c[0]}, ${c[4]}` : `${sea ? 'At sea · ' : ''}${nc.km < 10 ? nc.km.toFixed(1) : Math.round(nc.km)} km from ${c[0]}`;
     const wx = G.sky.override ? { label: 'Whiteout', temp: -12 } : G.sky.w;
     $('meta').textContent = `${G.sky.localTime(lon)} local · ${wx.label} ${wx.temp}°C${G.sky.w.live ? '' : ' (est.)'} · ${Math.abs(lat).toFixed(3)}°${lat >= 0 ? 'N' : 'S'} ${Math.abs(lon).toFixed(3)}°${lon >= 0 ? 'E' : 'W'}`;
     this.radar();
@@ -104,9 +107,14 @@ export class UI {
   radar() {
     const x = this.mini, S = 264, R = 170, k = S / (2 * R), p = G.player, px = p.pos.x, pz = p.pos.z, T = (wx, wz) => [S / 2 + (wx - px) * k, S / 2 + (wz - pz) * k];
     x.clearRect(0, 0, S, S); x.save(); x.beginPath(); x.arc(S / 2, S / 2, S / 2, 0, 7); x.clip();
-    const ch = G.world.chunkAt(px, pz), urban = ch && ch.urban; x.fillStyle = Geo.height(px, pz) < 0 ? '#0d2a44' : urban ? '#3b3f47' : '#22301f'; x.fillRect(0, 0, S, S);
-    if (urban) { x.fillStyle = '#23262c'; for (let gx = Math.floor((px - R) / BLOCK); gx <= Math.ceil((px + R) / BLOCK); gx++) for (let gz = Math.floor((pz - R) / BLOCK); gz <= Math.ceil((pz + R) / BLOCK); gz++) { const [a, b] = T(gx * BLOCK + 7, gz * BLOCK + 7); x.fillRect(a, b, (BLOCK - 14) * k, (BLOCK - 14) * k); } }
-    x.fillStyle = '#8791a3'; G.world.forBoxes(px - R, pz - R, px + R, pz + R, b => { const [a, c] = T(b.minx, b.minz); x.fillRect(a, c, (b.maxx - b.minx) * k, (b.maxz - b.minz) * k); });
+    const ch = G.world.chunkAt(px, pz), urban = ch && ch.urban, real = ch && ch.real; x.fillStyle = Geo.height(px, pz) < 0 ? '#0d2a44' : urban ? '#3b3f47' : '#22301f'; x.fillRect(0, 0, S, S);
+    if (real) {
+      // the real map: water, parks, then streets
+      const C = City.active, st = 6; for (let gz = -R; gz < R; gz += st) for (let gx = -R; gx < R; gx += st) { const m = City.maskAt(px + gx, pz + gz); if (m === 1 || m === 6) continue; x.fillStyle = m === 0 ? '#163a5a' : m === 3 ? '#8a7a50' : '#2f5a2a'; x.fillRect(S / 2 + gx * k, S / 2 + gz * k, st * k + 0.6, st * k + 0.6); }
+      const Rr = C.r; x.strokeStyle = '#6a6f78'; x.lineCap = 'round';
+      for (let cx = Math.floor((px - R) / 192); cx <= Math.floor((px + R) / 192); cx++) for (let cz = Math.floor((pz - R) / 192); cz <= Math.floor((pz + R) / 192); cz++) for (const e of C.eHome.get(cx + ',' + cz) || []) { const w = [0, 15, 13, 11.5, 10, 8.5, 7, 6, 4.5, 0, 6, 2.6, 2.6][Rr.cls[e]]; if (!w) continue; x.lineWidth = Math.max(1, w * k); x.beginPath(); for (let j = Rr.ps[e]; j < Rr.ps[e + 1]; j++) { const [a, b] = T(Rr.v[j * 2], Rr.v[j * 2 + 1]); j === Rr.ps[e] ? x.moveTo(a, b) : x.lineTo(a, b); } x.stroke(); }
+    } else if (urban) { x.fillStyle = '#23262c'; for (let gx = Math.floor((px - R) / BLOCK); gx <= Math.ceil((px + R) / BLOCK); gx++) for (let gz = Math.floor((pz - R) / BLOCK); gz <= Math.ceil((pz + R) / BLOCK); gz++) { const [a, b] = T(gx * BLOCK + 7, gz * BLOCK + 7); x.fillRect(a, b, (BLOCK - 14) * k, (BLOCK - 14) * k); } }
+    x.fillStyle = '#8791a3'; G.world.forBoxes(px - R, pz - R, px + R, pz + R, b => { if (b.bridge) return; if (b.rings) { x.beginPath(); for (const r of b.rings) for (let i = 0; i < r.length; i += 2) { const [a, c] = T(r[i], r[i + 1]); i ? x.lineTo(a, c) : x.moveTo(a, c); } x.fill('evenodd'); return; } const [a, c] = T(b.minx, b.minz); x.fillRect(a, c, (b.maxx - b.minx) * k, (b.maxz - b.minz) * k); });
     const dot = (wx, wz, col, r) => { const [a, b] = T(wx, wz); x.fillStyle = col; x.beginPath(); x.arc(a, b, r, 0, 7); x.fill(); };
     for (const c of G.ents.cars) if (!c.dead && c !== p.car) dot(c.pos.x, c.pos.z, c.ai === 'cop' ? '#4f8dff' : '#e9edf3', c.ai === 'cop' ? 5 : 3);
     for (const n of G.ents.npcs) if (!n.dead && n.kind !== 'ped') dot(n.pos.x, n.pos.z, n.kind === 'cop' ? '#4f8dff' : '#ff4455', 4);
