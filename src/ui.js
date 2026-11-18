@@ -39,7 +39,7 @@ export class UI {
     cv.addEventListener('contextmenu', e => e.preventDefault());
     cv.addEventListener('pointerdown', e => {
       if (G.state !== 'play') return;
-      if (e.pointerType === 'touch') { if (this.lookId < 0) { this.lookId = e.pointerId; this.lx = e.clientX; this.ly = e.clientY; } return; }
+      if (e.pointerType !== 'mouse') { if (!e.__stick && e.pointerId !== this.stick.id && this.lookId < 0) { this.lookId = e.pointerId; this.lx = e.clientX; this.ly = e.clientY; } return; }
       if (!document.pointerLockElement && cv.requestPointerLock) { const p = cv.requestPointerLock(); if (p && p.catch) p.catch(() => { }); }
       if (e.button === 0) press('attack', true); if (e.button === 2) press('aim', true); this.drag = true;
     });
@@ -48,15 +48,29 @@ export class UI {
     addEventListener('pointercancel', e => { if (e.pointerId === this.lookId) this.lookId = -1; });
     addEventListener('pointermove', e => {
       if (G.state !== 'play') return;
-      if (e.pointerType === 'touch') { if (e.pointerId === this.lookId) { I.lookX += (e.clientX - this.lx) * 0.0052; I.lookY += (e.clientY - this.ly) * 0.0042; this.lx = e.clientX; this.ly = e.clientY; } return; }
+      if (e.pointerType !== 'mouse') { if (e.pointerId === this.lookId) { I.lookX += (e.clientX - this.lx) * 0.0052; I.lookY += (e.clientY - this.ly) * 0.0042; this.lx = e.clientX; this.ly = e.clientY; } return; }
       if (document.pointerLockElement === cv || this.drag) { I.lookX += e.movementX * 0.0024; I.lookY += e.movementY * 0.0021; }
     });
     // virtual stick appears wherever the left thumb lands
-    const zone = $('stickZone'), st = $('stick'), nub = st.firstElementChild;
-    zone.addEventListener('pointerdown', e => { this.stick.id = e.pointerId; this.sx = e.clientX; this.sy = e.clientY; st.style.display = 'block'; st.style.left = e.clientX + 'px'; st.style.top = e.clientY + 'px'; zone.setPointerCapture(e.pointerId); e.preventDefault(); });
-    zone.addEventListener('pointermove', e => { if (e.pointerId !== this.stick.id) return; let dx = (e.clientX - this.sx) / 52, dy = (e.clientY - this.sy) / 52; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } this.stick.x = dx; this.stick.y = dy; nub.style.transform = `translate(${dx * 38}px,${dy * 38}px)`; });
-    const end = e => { if (e.pointerId !== this.stick.id) return; this.stick.id = -1; this.stick.x = this.stick.y = 0; st.style.display = 'none'; nub.style.transform = ''; };
-    zone.addEventListener('pointerup', end); zone.addEventListener('pointercancel', end);
+    // movement stick: any touch that starts on the left half of the screen (and not on a button) drives it,
+    // so it works wherever your thumb lands; it rests visibly at bottom-left
+    const st = $('stick'), nub = st.firstElementChild;
+    const stickStart = (id, x, y, target) => {
+      if (G.state !== 'play' || this.stick.id !== -1 || x > innerWidth * 0.5 || y < 70 || (target && target.closest && target.closest('button'))) return false;
+      this.stick.id = id; this.sx = x; this.sy = y; st.classList.add('on'); st.style.left = x + 'px'; st.style.top = y + 'px'; return true;
+    };
+    const stickMove = (id, x, y) => { if (id !== this.stick.id) return; let dx = (x - this.sx) / 52, dy = (y - this.sy) / 52; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } this.stick.x = dx; this.stick.y = dy; nub.style.transform = `translate(${dx * 38}px,${dy * 38}px)`; };
+    const stickEnd = id => { if (id !== this.stick.id) return; this.stick.id = -1; this.stick.x = this.stick.y = 0; st.classList.remove('on'); st.style.left = ''; st.style.top = ''; nub.style.transform = ''; };
+    if (window.PointerEvent) {
+      addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' && stickStart(e.pointerId, e.clientX, e.clientY, e.target)) { e.__stick = true; e.preventDefault(); } }, true);
+      addEventListener('pointermove', e => stickMove(e.pointerId, e.clientX, e.clientY), true);
+      addEventListener('pointerup', e => stickEnd(e.pointerId), true); addEventListener('pointercancel', e => stickEnd(e.pointerId), true);
+    } else {
+      // very old mobile browsers without pointer events: plain touch events
+      addEventListener('touchstart', e => { for (const t of e.changedTouches) stickStart('t' + t.identifier, t.clientX, t.clientY, t.target); }, { passive: true });
+      addEventListener('touchmove', e => { for (const t of e.changedTouches) stickMove('t' + t.identifier, t.clientX, t.clientY); }, { passive: true });
+      addEventListener('touchend', e => { for (const t of e.changedTouches) stickEnd('t' + t.identifier); }); addEventListener('touchcancel', e => { for (const t of e.changedTouches) stickEnd('t' + t.identifier); });
+    }
     const hold = (el, k) => { el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); el.classList.add('dn'); press(k, true); el.setPointerCapture(e.pointerId); }); const up = () => { el.classList.remove('dn'); press(k, false); }; el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); };
     hold($('t-jump'), 'jump'); hold($('t-trav'), 'traverse'); hold($('t-atk'), 'melee'); hold($('t-dodge'), 'dodge'); hold($('t-use'), 'interact'); hold($('t-fire'), 'attack');
     $('t-aim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); this.touchAim = !this.touchAim; $('t-aim').classList.toggle('on', this.touchAim); press('aim', this.touchAim); });
