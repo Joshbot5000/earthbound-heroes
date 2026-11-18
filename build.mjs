@@ -7,7 +7,8 @@ mkdirSync(out, { recursive: true });
 const r = await build({ entryPoints: ['src/main.js'], bundle: true, minify: true, format: 'iife', target: 'es2020', write: false,
   loader: { '.png': 'dataurl', '.jpg': 'dataurl', '.json': 'json' }, legalComments: 'none' });
 const js = r.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
-const html = readFileSync('src/index.html', 'utf8').replace('/*BUNDLE*/', () => js);
+const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+const html = readFileSync('src/index.html', 'utf8').replace('/*BUNDLE*/', () => js).replaceAll('/*BUILD*/', stamp);
 writeFileSync(out + 'index.html', html);
 const cities = readdirSync('assets/cities').filter(f => f.endsWith('.bin.gz'));
 mkdirSync(out + 'cities', { recursive: true });

@@ -39,16 +39,16 @@ export class UI {
     cv.addEventListener('contextmenu', e => e.preventDefault());
     cv.addEventListener('pointerdown', e => {
       if (G.state !== 'play') return;
-      if (e.pointerType !== 'mouse') { if (!e.__stick && e.pointerId !== this.stick.id && this.lookId < 0) { this.lookId = e.pointerId; this.lx = e.clientX; this.ly = e.clientY; } return; }
+      if (e.pointerType !== 'mouse') { if (!this.touchEvents && !e.__stick && e.pointerId !== this.stick.id && this.lookId === -1) { this.lookId = e.pointerId; this.lx = e.clientX; this.ly = e.clientY; } return; }
       if (!document.pointerLockElement && cv.requestPointerLock) { const p = cv.requestPointerLock(); if (p && p.catch) p.catch(() => { }); }
       if (e.button === 0) press('attack', true); if (e.button === 2) press('aim', true); this.drag = true;
     });
-    addEventListener('pointerup', e => { if (e.pointerId === this.lookId) this.lookId = -1; if (e.pointerType !== 'touch') { if (e.button === 0) press('attack', false); if (e.button === 2) press('aim', false); this.drag = false; } });
+    addEventListener('pointerup', e => { if (!this.touchEvents && e.pointerId === this.lookId) this.lookId = -1; if (e.pointerType !== 'touch') { if (e.button === 0) press('attack', false); if (e.button === 2) press('aim', false); this.drag = false; } });
     addEventListener('wheel', e => { if (G.state === 'play' && G.weapons && Math.abs(e.deltaY) > 4) { const now = performance.now(); if (now - (this.wheelT || 0) > 120) { this.wheelT = now; G.weapons.cycle(e.deltaY > 0 ? 1 : -1); } } }, { passive: true });
-    addEventListener('pointercancel', e => { if (e.pointerId === this.lookId) this.lookId = -1; });
+    addEventListener('pointercancel', e => { if (!this.touchEvents && e.pointerId === this.lookId) this.lookId = -1; });
     addEventListener('pointermove', e => {
       if (G.state !== 'play') return;
-      if (e.pointerType !== 'mouse') { if (e.pointerId === this.lookId) { I.lookX += (e.clientX - this.lx) * 0.0052; I.lookY += (e.clientY - this.ly) * 0.0042; this.lx = e.clientX; this.ly = e.clientY; } return; }
+      if (e.pointerType !== 'mouse') { if (!this.touchEvents && e.pointerId === this.lookId) { I.lookX += (e.clientX - this.lx) * 0.0052; I.lookY += (e.clientY - this.ly) * 0.0042; this.lx = e.clientX; this.ly = e.clientY; } return; }
       if (document.pointerLockElement === cv || this.drag) { I.lookX += e.movementX * 0.0024; I.lookY += e.movementY * 0.0021; }
     });
     // virtual stick appears wherever the left thumb lands
@@ -61,15 +61,36 @@ export class UI {
     };
     const stickMove = (id, x, y) => { if (id !== this.stick.id) return; let dx = (x - this.sx) / 52, dy = (y - this.sy) / 52; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } this.stick.x = dx; this.stick.y = dy; nub.style.transform = `translate(${dx * 38}px,${dy * 38}px)`; };
     const stickEnd = id => { if (id !== this.stick.id) return; this.stick.id = -1; this.stick.x = this.stick.y = 0; st.classList.remove('on'); st.style.left = ''; st.style.top = ''; nub.style.transform = ''; };
-    if (window.PointerEvent) {
+    // Phones (iPhone Safari especially) get classic touch events for the stick and camera: they are the most
+    // reliable input there. Buttons keep pointer events. Desktop mice never go through this path.
+    this.touchEvents = 'ontouchstart' in window;
+    if (this.touchEvents) {
+      const blocked = el => el && el.closest && el.closest('button, input, #arsenal, #pause, #title, #mapScreen');
+      addEventListener('touchstart', e => {
+        if (G.state !== 'play') return; let used = false;
+        for (const t of e.changedTouches) {
+          const el = document.elementFromPoint(t.clientX, t.clientY) || t.target; if (blocked(el)) continue;
+          const id = 't' + t.identifier;
+          if (stickStart(id, t.clientX, t.clientY, el)) { used = true; continue; }
+          if (this.lookId === -1) { this.lookId = id; this.lx = t.clientX; this.ly = t.clientY; used = true; }
+        }
+        if (used && e.cancelable) e.preventDefault();   // stop Safari treating the drag as scroll or zoom
+      }, { passive: false, capture: true });
+      addEventListener('touchmove', e => {
+        let used = false;
+        for (const t of e.changedTouches) {
+          const id = 't' + t.identifier;
+          if (id === this.stick.id) { stickMove(id, t.clientX, t.clientY); used = true; }
+          else if (id === this.lookId) { G.input.lookX += (t.clientX - this.lx) * 0.0052; G.input.lookY += (t.clientY - this.ly) * 0.0042; this.lx = t.clientX; this.ly = t.clientY; used = true; }
+        }
+        if (used && e.cancelable) e.preventDefault();
+      }, { passive: false, capture: true });
+      const tEnd = e => { for (const t of e.changedTouches) { const id = 't' + t.identifier; stickEnd(id); if (id === this.lookId) this.lookId = -1; } };
+      addEventListener('touchend', tEnd, { capture: true }); addEventListener('touchcancel', tEnd, { capture: true });
+    } else if (window.PointerEvent) {
       addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' && stickStart(e.pointerId, e.clientX, e.clientY, e.target)) { e.__stick = true; e.preventDefault(); } }, true);
       addEventListener('pointermove', e => stickMove(e.pointerId, e.clientX, e.clientY), true);
       addEventListener('pointerup', e => stickEnd(e.pointerId), true); addEventListener('pointercancel', e => stickEnd(e.pointerId), true);
-    } else {
-      // very old mobile browsers without pointer events: plain touch events
-      addEventListener('touchstart', e => { for (const t of e.changedTouches) stickStart('t' + t.identifier, t.clientX, t.clientY, t.target); }, { passive: true });
-      addEventListener('touchmove', e => { for (const t of e.changedTouches) stickMove('t' + t.identifier, t.clientX, t.clientY); }, { passive: true });
-      addEventListener('touchend', e => { for (const t of e.changedTouches) stickEnd('t' + t.identifier); }); addEventListener('touchcancel', e => { for (const t of e.changedTouches) stickEnd('t' + t.identifier); });
     }
     const hold = (el, k) => { el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); el.classList.add('dn'); press(k, true); el.setPointerCapture(e.pointerId); }); const up = () => { el.classList.remove('dn'); press(k, false); }; el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); };
     hold($('t-jump'), 'jump'); hold($('t-trav'), 'traverse'); hold($('t-atk'), 'melee'); hold($('t-dodge'), 'dodge'); hold($('t-use'), 'interact'); hold($('t-fire'), 'attack');
@@ -123,7 +144,7 @@ export class UI {
   hurt() { const h = $('hurt'); h.style.opacity = 1; clearTimeout(this.hT); this.hT = setTimeout(() => h.style.opacity = 0, 180); }
   poll() {
     const I = G.input, k = this.keys; let mx = (k.rt ? 1 : 0) - (k.lf ? 1 : 0), my = (k.up ? 1 : 0) - (k.dn ? 1 : 0);
-    if (this.stick.id >= 0) { mx = this.stick.x; my = -this.stick.y; I.down.sprint = Math.hypot(mx, my) > 0.88; }
+    if (this.stick.id !== -1) { mx = this.stick.x; my = -this.stick.y; I.down.sprint = Math.hypot(mx, my) > 0.88; }
     const gp = navigator.getGamepads ? [...navigator.getGamepads()].find(g => g && g.connected) : null;
     if (gp) {
       const dz = v => Math.abs(v) < 0.16 ? 0 : v; if (dz(gp.axes[0]) || dz(gp.axes[1])) { mx = dz(gp.axes[0]); my = -dz(gp.axes[1]); }
