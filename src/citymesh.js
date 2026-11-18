@@ -8,7 +8,7 @@ import { CH } from './geo.js';
 export function cityMaterials(reg, regionKey) {
   const R = {};
   const asphalt = regionKey === 'india' || reg.dusty ? new THREE.Color(0x4a4744) : new THREE.Color(0x2c2d30);
-  R.road = new THREE.MeshStandardMaterial({ color: asphalt, roughness: 0.92, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  R.road = new THREE.MeshStandardMaterial({ color: asphalt, roughness: 0.92, metalness: 0, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8, depthWrite: false });
   const ru = R.road.userData.u = { uWet: { value: 0 }, uMark: { value: regionKey === 'uk' ? 1 : regionKey === 'us' ? 2 : regionKey === 'india' ? 3 : 0 } };
   R.road.onBeforeCompile = s => {
     Object.assign(s.uniforms, ru);
@@ -36,7 +36,7 @@ export function cityMaterials(reg, regionKey) {
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n roughnessFactor = mix(0.92, 0.22, uWet) - mk * 0.2;');
   };
   R.road.customProgramCacheKey = () => 'road-v1';
-  R.pave = new THREE.MeshStandardMaterial({ color: reg.pave, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+  R.pave = new THREE.MeshStandardMaterial({ color: reg.pave, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8, depthWrite: false });
   const pu = R.pave.userData.u = { uWet: ru.uWet, uIndia: { value: regionKey === 'india' ? 1 : 0 } };
   R.pave.onBeforeCompile = s => {
     Object.assign(s.uniforms, pu);
@@ -124,8 +124,8 @@ export function streetMeshes(cx, cz, M) {
     if (bridge) br.add(R.v, R.ps[e], R.ps[e + 1], drive ? w + 10 : w + 1.5);
   }
   const out = [], rg = toGeo(road), pg = toGeo(pave), bg = br.geometry();
-  if (pg) { const m = new THREE.Mesh(pg, M.pave); m.receiveShadow = true; out.push(m); }
-  if (rg) { const m = new THREE.Mesh(rg, M.road); m.receiveShadow = true; out.push(m); }
+  if (pg) { const m = new THREE.Mesh(pg, M.pave); m.receiveShadow = true; m.renderOrder = 1; out.push(m); }
+  if (rg) { const m = new THREE.Mesh(rg, M.road); m.receiveShadow = true; m.renderOrder = 2; out.push(m); }
   if (bg) { const m = new THREE.Mesh(bg, M.bridge); m.receiveShadow = true; m.castShadow = true; out.push(m); }
   return out;
 }

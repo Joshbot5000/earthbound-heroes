@@ -56,8 +56,24 @@ export class World {
         id.data[o] = 128 + clamp(dx * 127, -127, 127); id.data[o + 1] = 128 + clamp(dy * 127, -127, 127); id.data[o + 2] = 255; id.data[o + 3] = 255;
       } x.putImageData(id, 0, 0);
     }, false);
-    wn.repeat.set(1100, 1100); const wn2 = wn.clone(); wn2.repeat.set(380, 380); wn2.needsUpdate = true;
-    this.waterMat = new THREE.MeshPhysicalMaterial({ color: 0x0a2c40, roughness: 0.06, metalness: 0.0, normalMap: wn, normalScale: new THREE.Vector2(0.45, 0.45), clearcoat: 1, clearcoatRoughness: 0.08, clearcoatNormalMap: wn2, clearcoatNormalScale: new THREE.Vector2(0.3, 0.3), transparent: true, opacity: 0.94, ior: 1.33 });
+    // water: two wave layers at different scales and directions (no visible tiling), Fresnel sky reflection
+    // from the environment, and a body colour that matches the real water body (murky river, blue ocean)
+    this.waterMat = new THREE.MeshStandardMaterial({ color: 0x0e3a52, roughness: 0.04, metalness: 0.0 });
+    const wu = this.waterMat.userData.u = { tWave: { value: wn }, uT: { value: 0 }, uChop: { value: 0.5 }, uSky: { value: new THREE.Color(0x9fb8d0) } };
+    this.waterMat.onBeforeCompile = sh => {
+      Object.assign(sh.uniforms, wu);
+      sh.vertexShader = 'varying vec3 vWW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vWW = (modelMatrix * vec4(position, 1.0)).xyz;');
+      sh.fragmentShader = 'uniform sampler2D tWave; uniform float uT, uChop; varying vec3 vWW;\n' + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        { vec2 p = vWW.xz;
+          vec3 a = texture2D(tWave, p / 23.0 + vec2(uT * 0.011, uT * 0.006)).xyz * 2.0 - 1.0;
+          vec3 b = texture2D(tWave, p / 61.0 * mat2(0.8, -0.6, 0.6, 0.8) - vec2(uT * 0.004, uT * 0.009)).xyz * 2.0 - 1.0;
+          vec3 c = texture2D(tWave, p / 7.3 * mat2(0.6, 0.8, -0.8, 0.6) + vec2(uT * 0.03, -uT * 0.02)).xyz * 2.0 - 1.0;
+          float dist = length(vWW - cameraPosition), fade = 1.0 / (1.0 + dist * 0.004);
+          vec2 g = (a.xy * 0.55 + b.xy * 0.45 + c.xy * 0.35 * fade) * uChop;
+          vec3 nW = normalize(vec3(g.x, 1.0, g.y));
+          normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz); }`);
+    };
+    this.waterMat.customProgramCacheKey = () => 'water-v2';
     this.water = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000), this.waterMat);
     this.water.rotation.x = -Math.PI / 2; this.water.receiveShadow = true; scene.add(this.water);
     // distant terrain
@@ -72,8 +88,17 @@ export class World {
     return this.facades[regKey];
   }
   grid(regKey, lot) { const k = regKey + lot; if (!this.grids[k]) this.grids[k] = new THREE.MeshStandardMaterial({ map: gridTexture(lot, region(regKey)), roughness: 0.88 }); return this.grids[k]; }
+  // real colour of the water you are standing by
+  setWater(c) {
+    const W = { london: [0x3a3a2a, 0.28], paris: [0x384034, 0.25], mumbai: [0x324c4c, 0.55], newyork: [0x22383e, 0.5], tokyo: [0x26404a, 0.45], dubai: [0x1f6a72, 0.4], sydney: [0x15405a, 0.5] };
+    let col = 0x0e3a52, chop = 0.6;
+    if (c && W[c.zone.key]) [col, chop] = W[c.zone.key];
+    else { const lat = Math.abs(Geo.lat0 || 0); col = lat < 25 ? 0x0f5a6e : lat < 50 ? 0x0e3a52 : 0x1a3540; }
+    this.waterMat.color.setHex(col); this.waterMat.userData.u.uChop.value = chop;
+  }
   // called after travel: switch the real-city layer on or off
   setCity(c) {
+    this.setWater(c);
     if (c) {
       const reg = region(c.region); this.cityMats = cityMaterials(reg, c.region); this.cityMats.ground.userData.u.tMask.value = maskTexture(c);
       this.cityMats.ground.userData.u.uMaskO.value.set(c.x0, c.z0, c.mr, 0);
@@ -290,11 +315,11 @@ export class World {
       for (const [k, ch] of this.chunks) {
         const d = Math.max(Math.abs(ch.cx - cx), Math.abs(ch.cz - cz));
         if (d > Rb + 1) { this.dropGround(ch); this.dropBuildings(ch); G.props && G.props.dropChunk(ch); this.chunks.delete(k); }
-        else { if (d > Rg + 1) this.dropGround(ch); if (ch.bmesh && (d > 3) !== ch.farMesh) { this.dropBuildings(ch); ch.built = false; } }
+        else { if (d > Rg + 1) this.dropGround(ch); }
       }
       for (let r = 0; r <= Rb; r++) for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) {
         if (Math.max(Math.abs(i), Math.abs(j)) !== r) continue;
-        const ch = this.chunks.get(key(cx + i, cz + j)); if (!ch || !ch.built || (r <= Rg && !ch.ground)) this.queue.push([cx + i, cz + j, r]);
+        const ch = this.chunks.get(key(cx + i, cz + j)); if (!ch || !ch.built || (r <= Rg && !ch.ground) || (ch.bmesh && (r > 3) !== ch.farMesh)) this.queue.push([cx + i, cz + j, r]);
       }
       this.updateFar(cx, cz); G.props && G.props.recenter(cx, cz);
     }
@@ -302,6 +327,9 @@ export class World {
     while (this.queue.length && performance.now() - t0 < budgetMs) {
       const [x, z, r] = this.queue.shift(), k = key(x, z); let ch = this.chunks.get(k);
       if (!ch) { ch = this.genChunk(x, z); this.chunks.set(k, ch); G.props && G.props.addChunk(ch, r); }
+      if (ch.built && ch.bmesh && (r > 3) !== ch.farMesh) {
+        const old = ch.bmesh; ch.farMesh = r > 3; ch.bmesh = this.buildBuildings(ch, ch.farMesh); if (ch.bmesh) this.scene.add(ch.bmesh); this.scene.remove(old); old.geometry.dispose();
+      }
       if (!ch.built) {
         ch.built = true; ch.farMesh = r > 3; ch.bmesh = this.buildBuildings(ch, ch.farMesh); if (ch.bmesh) this.scene.add(ch.bmesh);
         for (const L of ch.marks) { if (!L.group) L.group = L.build(); this.scene.add(L.group); }
@@ -326,9 +354,9 @@ export class World {
     for (let i = 0; i < p.count; i++) {
       const x = ox + p.getX(i), z = oz + p.getZ(i), h = Geo.height(x, z), u = Geo.urban(x, z);
       const near = Math.max(Math.abs(x / CH - cx - 0.5), Math.abs(z / CH - cz - 0.5)) < Rg - 0.6;
-      p.setY(i, near ? h - 60 : h - 1.5);
+      p.setY(i, near ? h - 60 : City.inside(x, z) && h > 0.5 ? h - 0.12 : h - 1.5);
       this.groundColor(x, z, h, 0, c); const t = smooth(0.1, 0.4, u);
-      col.setXYZ(i, lerp(c[0], 0.36, t), lerp(c[1], 0.36, t), lerp(c[2], 0.36, t));
+      if (City.inside(x, z)) { const m = City.maskAt(x, z); if (m === 2 || m === 5) col.setXYZ(i, 0.24, 0.34, 0.16); else col.setXYZ(i, 0.42, 0.41, 0.39); } else col.setXYZ(i, lerp(c[0], 0.36, t), lerp(c[1], 0.36, t), lerp(c[2], 0.36, t));
     }
     p.needsUpdate = true; col.needsUpdate = true; g.computeVertexNormals();
   }
@@ -337,7 +365,7 @@ export class World {
     for (const m of Object.values(this.facades)) { const u = m.userData.u; u.uLit.value = on * lerp(0.05, 0.45, night); u.uGlow.value = on * lerp(0.0, 2.2, night); u.uWet.value = wet; }
     if (this.cityMats) this.cityMats.road.userData.u.uWet.value = wet;
     for (const m of Object.values(this.grids)) m.roughness = lerp(0.88, 0.3, wet);
-    this.waterMat.normalMap.offset.set(G.time * 0.004, G.time * 0.0027); this.waterMat.clearcoatNormalMap.offset.set(-G.time * 0.006, G.time * 0.0041);
+    this.waterMat.userData.u.uT.value = G.time;
     for (const ch of this.chunks.values()) if (ch.orbMesh) ch.orbMesh.rotation.y = 0;
     G.props && G.props.setLighting(night, blackout);
   }
@@ -356,7 +384,8 @@ export class World {
   // Move a vertical cylinder out of buildings, street furniture and onto the ground. Mutates p and v.
   collide(p, r, h, v, out, noProps) {
     out.grounded = false; out.wall = null; out.box = null; out.water = false;
-    this.forBoxes(p.x - r, p.z - r, p.x + r, p.z + r, b => {
+    // two passes: being pushed out of one building can push you into the one sharing its wall
+    for (let pass = 0; pass < 2; pass++) this.forBoxes(p.x - r, p.z - r, p.x + r, p.z + r, b => {
       if (p.y >= b.maxy || p.y + h <= b.miny) return;
       const inside = insideSolid(b, p.x, p.z), d2 = nearestWall(b, p.x, p.z, _n);
       if (!inside && d2 >= r * r) return;
@@ -371,6 +400,8 @@ export class World {
     if (p.y <= g) { p.y = g; if (v.y < 0) v.y = 0; out.grounded = true; }
     out.ground = g; return out;
   }
+  // is this point inside any building (below its roof)?
+  insideAny(p, h = 1.8) { let hit = false; this.forBoxes(p.x - 0.01, p.z - 0.01, p.x + 0.01, p.z + 0.01, b => { if (!hit && p.y + 0.3 < b.maxy - 0.75 && p.y + h > b.miny && insideSolid(b, p.x, p.z)) hit = true; }); return hit; }
   // First hit along a ray against buildings and terrain.
   raycast(o, d, max, hit = {}) {
     let best = max, nx = 0, ny = 0, nz = 0, box = null;

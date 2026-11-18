@@ -5,12 +5,16 @@ import { Geo, BLOCK, CH } from './geo.js';
 import { HEROES } from './powers.js';
 import { City } from './city.js';
 import { Landmarks } from './landmarks.js';
+import { WEAPONS, BY_ID, DEFAULT_LOADOUT } from './weapons.js';
 
 const $ = id => document.getElementById(id);
 const KEYS = { KeyW: 'up', ArrowUp: 'up', KeyS: 'dn', ArrowDown: 'dn', KeyA: 'lf', ArrowLeft: 'lf', KeyD: 'rt', ArrowRight: 'rt', Space: 'jump', ShiftLeft: 'sprint', ShiftRight: 'sprint',
-  KeyE: 'traverse', KeyQ: 'p1', KeyR: 'p2', KeyX: 'p3', Digit1: 'p1', Digit2: 'p2', Digit3: 'p3', KeyC: 'dodge', KeyF: 'interact', Enter: 'interact' };
-const HELP = [['Move', 'W A S D · left stick'], ['Look', 'Mouse · drag right side'], ['Jump / double jump', 'Space · JUMP'], ['Sprint', 'Shift · push stick fully'], ['Traverse (hold)', 'E or right mouse · HOLD'],
-  ['Attack', 'Left mouse · HIT'], ['Dodge', 'C · DODGE'], ['Powers', 'Q · R · X'], ['Enter / leave car', 'F · CAR'], ['Handbrake', 'Space · JUMP'], ['Wall-run / climb', 'Run or jump into a wall and keep pushing'], ['Switch hero', 'Z · ⇄'], ['World map', 'M · 🌍'], ['Pause', 'Esc · Ⅱ']];
+  KeyE: 'traverse', KeyQ: 'p1', KeyR: 'p2', KeyX: 'p3', KeyC: 'dodge', KeyF: 'interact', Enter: 'interact', KeyV: 'melee', KeyT: 'reload' };
+const SLOTKEYS = { Digit0: 0, Backquote: 0, Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4, Digit5: 5 };
+const HELP = [['Move', 'W A S D · left stick'], ['Look', 'Mouse · drag right side'], ['Jump / double jump', 'Space · JUMP'], ['Sprint', 'Shift · push stick fully'],
+  ['Swing / traverse (hold)', 'E · HOLD'], ['Change direction mid-swing', 'Steer hard, or tap E again'], ['Swing jump', 'Space while swinging'], ['Web wings (Vesper)', 'Hold Space while falling'],
+  ['Fire', 'Left mouse · FIRE'], ['Aim / scope', 'Right mouse · AIM'], ['Choose weapon', '1–5, 0 fists, scroll · GUN'], ['Reload', 'T (automatic when empty)'], ['Melee', 'V · HIT'], ['Arsenal', 'Tab · hold GUN'],
+  ['Dodge', 'C · DODGE'], ['Powers', 'Q · R · X'], ['Enter / leave car', 'F · CAR'], ['Wall-run / climb', 'Run or jump into a wall and keep pushing'], ['Switch hero', 'Z · ⇄'], ['World map', 'M · 🌍'], ['Pause', 'Esc · Ⅱ']];
 
 export class UI {
   constructor() {
@@ -25,7 +29,9 @@ export class UI {
       if (e.code === 'KeyM') G.state === 'map' ? G.closeMap() : G.state === 'play' && G.openMap();
       if (e.code === 'KeyZ' && G.state === 'play') G.cycleHero();
       if ((e.code === 'KeyP' || e.code === 'Escape') && (G.state === 'play' || G.state === 'pause')) G.setPause(G.state === 'play');
-      if (e.code === 'Tab') e.preventDefault();
+      else if (e.code === 'Escape' && G.state === 'arsenal') this.closeArsenal();
+      if (e.code === 'Tab') { e.preventDefault(); if (G.state === 'play') this.openArsenal(); else if (G.state === 'arsenal') this.closeArsenal(); }
+      if (SLOTKEYS[e.code] !== undefined && G.state === 'play' && G.weapons) G.weapons.select(SLOTKEYS[e.code]);
     });
     addEventListener('keyup', e => { const k = KEYS[e.code]; if (k) { this.keys[k] = false; press(k, false); } });
     addEventListener('blur', () => { for (const k in this.keys) this.keys[k] = false; for (const k in I.down) I.down[k] = false; });
@@ -35,9 +41,10 @@ export class UI {
       if (G.state !== 'play') return;
       if (e.pointerType === 'touch') { if (this.lookId < 0) { this.lookId = e.pointerId; this.lx = e.clientX; this.ly = e.clientY; } return; }
       if (!document.pointerLockElement && cv.requestPointerLock) { const p = cv.requestPointerLock(); if (p && p.catch) p.catch(() => { }); }
-      if (e.button === 0) press('attack', true); if (e.button === 2) press('traverse', true); this.drag = true;
+      if (e.button === 0) press('attack', true); if (e.button === 2) press('aim', true); this.drag = true;
     });
-    addEventListener('pointerup', e => { if (e.pointerId === this.lookId) this.lookId = -1; if (e.pointerType !== 'touch') { if (e.button === 0) press('attack', false); if (e.button === 2) press('traverse', false); this.drag = false; } });
+    addEventListener('pointerup', e => { if (e.pointerId === this.lookId) this.lookId = -1; if (e.pointerType !== 'touch') { if (e.button === 0) press('attack', false); if (e.button === 2) press('aim', false); this.drag = false; } });
+    addEventListener('wheel', e => { if (G.state === 'play' && G.weapons && Math.abs(e.deltaY) > 4) { const now = performance.now(); if (now - (this.wheelT || 0) > 120) { this.wheelT = now; G.weapons.cycle(e.deltaY > 0 ? 1 : -1); } } }, { passive: true });
     addEventListener('pointercancel', e => { if (e.pointerId === this.lookId) this.lookId = -1; });
     addEventListener('pointermove', e => {
       if (G.state !== 'play') return;
@@ -51,7 +58,14 @@ export class UI {
     const end = e => { if (e.pointerId !== this.stick.id) return; this.stick.id = -1; this.stick.x = this.stick.y = 0; st.style.display = 'none'; nub.style.transform = ''; };
     zone.addEventListener('pointerup', end); zone.addEventListener('pointercancel', end);
     const hold = (el, k) => { el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); el.classList.add('dn'); press(k, true); el.setPointerCapture(e.pointerId); }); const up = () => { el.classList.remove('dn'); press(k, false); }; el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); };
-    hold($('t-jump'), 'jump'); hold($('t-trav'), 'traverse'); hold($('t-atk'), 'attack'); hold($('t-dodge'), 'dodge'); hold($('t-use'), 'interact');
+    hold($('t-jump'), 'jump'); hold($('t-trav'), 'traverse'); hold($('t-atk'), 'melee'); hold($('t-dodge'), 'dodge'); hold($('t-use'), 'interact'); hold($('t-fire'), 'attack');
+    $('t-aim').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); this.touchAim = !this.touchAim; $('t-aim').classList.toggle('on', this.touchAim); press('aim', this.touchAim); });
+    // GUN: tap to cycle weapons, hold to open the arsenal
+    { const b = $('t-wpn'); let t = 0, tm = null; b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); t = performance.now(); tm = setTimeout(() => { tm = null; this.openArsenal(); }, 550); });
+      b.addEventListener('pointerup', () => { if (tm) { clearTimeout(tm); tm = null; G.weapons && G.weapons.cycle(1); } }); b.addEventListener('pointercancel', () => { if (tm) clearTimeout(tm); tm = null; }); }
+    this.slotBtns = [0, 1, 2, 3, 4, 5].map(i => { const b = document.createElement('button'); b.className = 'glass'; $('slots').appendChild(b); b.onclick = () => G.weapons && G.weapons.select(i); return b; });
+    $('ars-done').onclick = () => this.closeArsenal(); $('ars-reset').onclick = () => { G.weapons.setLoadout(DEFAULT_LOADOUT); this.renderArsenal(); };
+    $('p-ars').onclick = () => { G.setPause(false); this.openArsenal(); };
     // HUD skeleton
     $('stars').innerHTML = '<i>★</i>'.repeat(5);
     this.pw = [0, 1, 2].map(i => { const b = document.createElement('button'); b.className = 'pw glass'; b.innerHTML = `<kbd>${'QRX'[i]}</kbd><b></b><small></small><u></u>`; $('powers').appendChild(b); hold(b, 'p' + (i + 1)); return b; });
@@ -74,6 +88,24 @@ export class UI {
     const d = document.createElement('div'); d.className = 'toast glass'; d.innerHTML = `<b>${title}</b>` + (sub ? `<span>${sub}</span>` : ''); const box = $('toasts'); box.appendChild(d);
     while (box.children.length > 3) box.firstChild.remove(); setTimeout(() => d.remove(), 3600);
   }
+  weaponChanged() {
+    const W = G.weapons; if (!W) return; const w = W.current; $('wname').textContent = w ? w.name : 'Fists';
+    this.slotBtns.forEach((b, i) => { const id = i ? W.loadout[i - 1] : null; b.innerHTML = `${i}<br>${id ? BY_ID[id].name.split(' ')[0].slice(0, 6) : 'Fists'}`; b.classList.toggle('on', i === W.slot); });
+    $('t-fire').style.display = w ? 'grid' : 'none'; $('t-aim').style.display = w ? 'grid' : 'none'; $('t-wpn').textContent = w ? w.name.split(' ')[0].slice(0, 5).toUpperCase() : 'GUN';
+  }
+  hitmarker(kill, head) { const h = $('hitm'); h.classList.toggle('kill', !!kill); h.style.opacity = 1; clearTimeout(this.hmT); this.hmT = setTimeout(() => h.style.opacity = 0, kill ? 260 : 120); G.audio.hitmark && G.audio.hitmark(kill); }
+  killfeed(n, head) { const d = document.createElement('div'); d.className = 'glass'; d.innerHTML = `${n.kind === 'cop' ? 'Officer down' : n.kind === 'thug' ? (n.heavy ? '<b>Syndicate heavy</b> down' : '<b>Syndicate</b> down') : 'Civilian down'}${head ? ' · headshot' : ''}`; const f = $('feed'); f.prepend(d); while (f.children.length > 4) f.lastChild.remove(); setTimeout(() => d.remove(), 3500); }
+  openArsenal() { if (G.state !== 'play' && G.state !== 'pause') return; this.arsSel = this.arsSel || 1; this.renderArsenal(); G.setState('arsenal'); }
+  closeArsenal() { G.setState('play'); }
+  renderArsenal() {
+    const W = G.weapons, lo = W.loadout, max = k => Math.max(...WEAPONS.map(w => k(w)));
+    const dps = w => w.dmg * (w.pellets || 1) * w.rate * (w.kind === 'swarm' ? 4 : 1), rng = w => w.range || (w.kind === 'grenade' ? 120 : 300);
+    $('arsSlots').innerHTML = lo.map((id, i) => `<button class="glass ${this.arsSel === i + 1 ? 'sel' : ''}" data-s="${i + 1}"><small>Slot ${i + 1}</small>${BY_ID[id].name}</button>`).join('');
+    $('arsSlots').onclick = e => { const b = e.target.closest('button'); if (b) { this.arsSel = +b.dataset.s; this.renderArsenal(); } };
+    const bar = (v, m) => `<u><s style="width:${Math.round(Math.min(1, v / m) * 100)}%"></s></u>`;
+    $('arsGrid').innerHTML = WEAPONS.map(w => `<button class="wcard glass ${lo.includes(w.id) ? 'in' : ''}" data-w="${w.id}"><b>${w.name}</b><i>${w.blurb}</i><div class="st"><span>Damage</span>${bar(w.dmg * (w.pellets || 1), 240)}<span>Fire rate</span>${bar(w.rate, 28)}<span>Firepower</span>${bar(dps(w), 600)}<span>Range</span>${bar(rng(w), 500)}</div></button>`).join('');
+    $('arsGrid').onclick = e => { const b = e.target.closest('.wcard'); if (!b) return; const lo2 = W.loadout.slice(), id = b.dataset.w, at = lo2.indexOf(id); if (at >= 0) lo2[at] = lo2[this.arsSel - 1]; lo2[this.arsSel - 1] = id; W.setLoadout(lo2); this.arsSel = this.arsSel % 5 + 1; this.renderArsenal(); };
+  }
   hurt() { const h = $('hurt'); h.style.opacity = 1; clearTimeout(this.hT); this.hT = setTimeout(() => h.style.opacity = 0, 180); }
   poll() {
     const I = G.input, k = this.keys; let mx = (k.rt ? 1 : 0) - (k.lf ? 1 : 0), my = (k.up ? 1 : 0) - (k.dn ? 1 : 0);
@@ -82,13 +114,23 @@ export class UI {
     if (gp) {
       const dz = v => Math.abs(v) < 0.16 ? 0 : v; if (dz(gp.axes[0]) || dz(gp.axes[1])) { mx = dz(gp.axes[0]); my = -dz(gp.axes[1]); }
       I.lookX += dz(gp.axes[2]) * 0.05; I.lookY += dz(gp.axes[3]) * 0.035;
-      const map = { 0: 'jump', 1: 'dodge', 2: 'attack', 3: 'interact', 7: 'traverse', 6: 'sprint', 4: 'p1', 5: 'p2', 10: 'sprint', 11: 'p3' };
+      const map = { 0: 'jump', 1: 'dodge', 2: 'melee', 3: 'interact', 7: 'attack', 6: 'aim', 5: 'traverse', 4: 'p1', 12: 'p2', 13: 'p3', 10: 'sprint', 11: 'reload' };
+      if (gp.buttons[14] && gp.buttons[14].pressed && !this.gpL) G.weapons && G.weapons.cycle(-1); this.gpL = gp.buttons[14] && gp.buttons[14].pressed;
+      if (gp.buttons[15] && gp.buttons[15].pressed && !this.gpR) G.weapons && G.weapons.cycle(1); this.gpR = gp.buttons[15] && gp.buttons[15].pressed;
       this.gpd = this.gpd || {}; for (const b in map) { const v = gp.buttons[b] && gp.buttons[b].pressed; if (v !== !!this.gpd[b]) { this.gpd[b] = v; this.press(map[b], v); } }
     }
     const l = Math.hypot(mx, my); if (l > 1) { mx /= l; my /= l; } I.mx = mx; I.my = my;
   }
   frame(dt) {
     const p = G.player, w = G.wanted; this.tAcc += dt;
+    const W = G.weapons, cw = W && W.current;
+    if (W) {
+      const scoped = cw && cw.zoom && W.aimK > 0.8 && p.mode === 'foot';
+      $('scope').style.display = scoped ? 'block' : 'none'; $('cross').style.display = cw ? 'none' : ''; const xh = $('xhair'); xh.style.display = cw && !scoped ? 'block' : 'none';
+      if (cw) { const g = 4 + (cw.spread[0] * (1 - W.aimK) + cw.spread[1] * W.aimK + W.bloom * 0.03) * 380; const [a, b2, c2, d2] = xh.children; a.style.top = (-g - 9) + 'px'; b2.style.top = g + 'px'; c2.style.left = (-g - 9) + 'px'; d2.style.left = g + 'px'; }
+      $('wpn').style.display = cw ? 'block' : 'none';
+      if (cw) { $('wammo').innerHTML = W.reloadT > 0 ? 'Reloading' : `${W.ammo[cw.id]}<small> / ${cw.mag}</small>`; $('wrl').style.width = (W.reloadT > 0 ? (1 - W.reloadT / cw.reload) * 100 : cw.charge ? Math.min(1, W.chargeT / cw.charge) * 100 : 0) + '%'; }
+    }
     $('hp').firstChild.style.width = clamp(p.hp, 0, 100) + '%'; $('en').firstChild.style.width = p.energy + '%';
     p.hero.powers.forEach((d, i) => { const c = G.powers.cd[i]; this.pw[i].lastChild.style.height = (c > 0 ? c / d.cd * 100 : p.energy < d.cost ? 100 : 0) + '%'; });
     if (this.tAcc < 0.2) return; this.tAcc = 0;

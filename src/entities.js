@@ -44,7 +44,7 @@ export class Car {
     this.vf = vf; this.steer = steer; this.physics(dt);
   }
   physics(dt) {
-    const p = this.pos; this.vy -= GRAV * dt; p.x += this.vel.x * dt; p.z += this.vel.z * dt; p.y += this.vy * dt;
+    const p = this.pos, px = p.x, pz = p.z; this.vy -= GRAV * dt; p.x += this.vel.x * dt; p.z += this.vel.z * dt; p.y += this.vy * dt;
     this.yaw += this.av * dt; this.av *= Math.exp(-(this.grounded ? 2.6 : 0.4) * dt);
     // the body is a row of circles nose to tail, so corners clip and spin the car
     const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw), n = this.circ, r = this.spec.w / 2 + 0.05, half = this.spec.len / 2 - r;
@@ -62,6 +62,7 @@ export class Car {
     }
     if (hitN) { const loss = hitN[4]; if (loss > 4) { this.damage(loss * 1.5 * (this.spec.mass > 5000 ? 0.3 : 1), hitN[2], hitN[3]); G.audio.crash(p, loss); if (this === G.player.car) G.shake = Math.min(1, loss / 18); } }
     G.props && G.props.carHit(this);
+    if (G.world.insideAny(p, 1.4)) { p.x = px; p.z = pz; this.vel.x *= -0.2; this.vel.z *= -0.2; }   // never end inside a building
     if (grounded) { if (this.vy < -6 && this === G.player.car) G.shake = Math.max(G.shake, Math.min(0.5, -this.vy / 30)); this.vy = 0; this.grounded = true; } else if (this.grounded && p.y - g < 0.5 && this.vy <= 0) { p.y = g; this.vy = 0; } else this.grounded = false;
     if (g < -1.2 && p.y < -0.6) { this.vel.multiplyScalar(Math.exp(-3 * dt)); p.y = Math.max(p.y, -1.2); this.vy = Math.max(this.vy, 0); this.grounded = true; }
     out.box = null; this.sync(dt);
@@ -182,6 +183,7 @@ export class Car {
       this.infected -= dt; if (Math.random() < dt * 12) G.fx.burst(_c.copy(this.pos).setY(this.pos.y + 1.2), 0x66ff44, 1, 2, 0.8, 1.2, -2, 2);
       if (this.infected <= 0) this.explode();
     }
+    if (this.onFire > 0 && !this.dead) { this.onFire -= dt; this.damage(9 * dt); if (Math.random() < dt * 25) G.fx.burst(_c.copy(this.pos).setY(this.pos.y + 1.2), 0xff7a1a, 1, 1.5, 0.7, 2, -5, 1.2); }
     if (this.dead) { this.deadT += dt; if (Math.random() < dt * 14 && this.deadT < 14) G.fx.burst(_c.copy(this.pos).setY(this.pos.y + 1), this.deadT < 6 ? 0xff7020 : 0x333333, 1, 1.5, 1.6, 2.5, -4, 1.4); }
     if (this === G.player.car) return;
     if (this.infected > 0 && this.ai !== 'none') {            // hijacked by the virus: drives itself, badly
@@ -204,7 +206,7 @@ export class NPC {
     this.pos = V().set(x, Geo.height(x, z), z); this.vel = V(); this.yaw = Math.random() * TAU; this.hp = this.maxHp = heavy ? 220 : kind === 'ped' ? 40 : kind === 'thug' ? 90 : 80;
     this.state = 'walk'; this.t = 0; this.cool = 1 + Math.random(); this.gun = kind === 'cop' || (kind === 'thug' && !heavy && Math.random() < 0.35);
     this.frozen = 0; this.webbed = 0; this.infected = 0; this.gen = 0; this.burning = 0; this.dead = false; this.deadT = 0; this.punch = 0; this.side = 1; this.grounded = true;
-    this.axis = Math.random() < 0.5 ? 0 : 1; this.sgn = Math.random() < 0.5 ? 1 : -1; this.hostile = kind === 'thug'; this.gang = null; this.fx = x; this.fz = z + 1; this.shell = null; this.anim = {};
+    this.axis = Math.random() < 0.5 ? 0 : 1; this.sgn = Math.random() < 0.5 ? 1 : -1; if (this.gun && G.weapons) G.weapons.armNPC(this); this.hostile = kind === 'thug'; this.gang = null; this.fx = x; this.fz = z + 1; this.shell = null; this.anim = {};
   }
   setShell(color, opacity) {
     if (!color) { if (this.shell) { this.rig.root.remove(this.shell); this.shell.material.dispose(); this.shell = null; } return; }

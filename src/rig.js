@@ -161,7 +161,9 @@ export function animateRig(r, s, dt) {
   if (s.slide) Object.assign(T, { bodyX: 0.35, bodyY: 0.8, aLx: -0.9, aRx: 0.7, aLz: 1.0, aRz: -0.9, fL: -0.3, fR: -0.3, lLx: 0.75, lRx: -0.55, sL: 0.9, sR: 0.75, chestY: 0.5 });
   if (s.wall) Object.assign(T, { bodyX: 0.5, bodyZ: s.wall * 0.3 });
   if (s.sit) Object.assign(T, { bodyX: -0.1, bodyY: 0.55, aLx: -1.1, aRx: -1.1, fL: -0.5, fR: -0.5, lLx: -1.4, lRx: -1.4, sL: 1.3, sR: 1.3, aLz: 0.1, aRz: -0.1 });
-  if (s.aim) Object.assign(T, { aRx: -1.5, fR: -0.05, aRz: 0, chestY: -0.25 });
+  if (s.aim) { const pt = clamp(s.aimPitch || 0, -1, 1) * 0.9;
+    Object.assign(T, { aRx: -1.5 + pt, fR: -0.05, aRz: 0, chestY: -0.25 });
+    if (s.aim2) Object.assign(T, { aLx: -1.3 + pt, aLz: 0.62, fL: -0.6, chestY: -0.38 }); }
   if (s.flail) { T.aLx = -2.4 + Math.sin(ph * 2.2) * 0.8; T.aRx = -2.4 + Math.cos(ph * 2.5) * 0.8; }
   if (s.punch > 0) { const k = Math.sin(clamp(s.punch, 0, 1) * Math.PI), R = s.punchSide > 0;
     if (s.punchSide === 2) Object.assign(T, { lRx: -1.7 * k, sR: 0.2, bodyX: -0.35 * k, chestY: 0.5 * k });

@@ -9,6 +9,21 @@ An open-world superhero sandbox set on the real planet Earth. It runs in a web b
 - **Physics**: lampposts, traffic lights, bins, benches, bollards, post boxes, phone boxes and trees are solid. Hit hard enough, they break free and topple as rigid bodies; cars lose momentum by mass, spin when clipped off-centre and dent where they are hit.
 - The sun, moon and weather follow the real clock and conditions where you are standing; tap anywhere on the globe to travel there.
 - Four heroes, each with their own way of getting around and three powers.
+- **Weapons**: twelve to choose from (pistol, SMG, assault rifle, pump shotgun, minigun, sniper rifle, rocket launcher, homing swarm launcher, grenade launcher, railgun, flamethrower, arc caster). Pick any five for your arsenal (Tab, or hold GUN on a phone). Aim over the shoulder, headshots, recoil, tracers, bullet holes, explosions.
+- **Swinging** modelled on how Spider-Man 2 plays: webs attach ahead of you on real buildings, the arc speeds you up at the bottom and flings you at release, steer hard or tap swing again to turn instantly, swing-jump, web wings, point launch off rooftop edges, and wall-runs when you hit a wall.
+
+## Controls
+
+| | Keyboard and mouse | Touch | Gamepad |
+|---|---|---|---|
+| Move / look | W A S D / mouse | left side / drag right side | sticks |
+| Swing (hold) | E | HOLD | RB |
+| Jump, swing jump, glide (hold) | Space | JUMP | A |
+| Fire / aim | Left / right mouse | FIRE / AIM | RT / LT |
+| Choose weapon | 1–5, 0 fists, wheel | GUN (hold for arsenal) | D-pad left/right |
+| Reload / melee | T / V | automatic / HIT | R3 / X |
+| Powers | Q, R, X | power buttons | LB, D-pad up/down |
+| Car | F | CAR | Y |
 
 ## Play
 

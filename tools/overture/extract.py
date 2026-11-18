@@ -75,6 +75,23 @@ for r in recs:
     g = g.simplify(0.35, preserve_topology=True)
     for p in (g.geoms if hasattr(g, 'geoms') else [g]):
         if p.geom_type == 'Polygon' and p.area >= 5: polys.append((r, p))
+# drop duplicates: two shapes that mostly overlap AND span mostly the same heights would be drawn on top of
+# each other (flicker) - keep the larger. Stacked parts (podium + tower) overlap in plan but not in height, so both stay.
+def vrange(r):
+    h = r['height'] or ((r['num_floors'] or 0) * 3.3) or 12; return (r.get('min_height') or 0, h)
+order = sorted(range(len(polys)), key=lambda k: -polys[k][1].area)
+tree = shapely.STRtree([p for _, p in polys]); keep = [True] * len(polys); kept = set()
+for k in order:
+    r, p = polys[k]; a0, a1 = vrange(r)
+    for j in tree.query(p):
+        if j == k or j not in kept: continue
+        q = polys[j][1]; inter = p.intersection(q).area
+        if inter < 0.6 * min(p.area, q.area): continue
+        b0, b1 = vrange(polys[j][0]); ov = max(0, min(a1, b1) - max(a0, b0))
+        if ov > 0.6 * min(a1 - a0, b1 - b0): keep[k] = False; break
+    if keep[k]: kept.add(k)
+dropped = keep.count(False); polys = [polys[k] for k in range(len(polys)) if keep[k]]
+print(f'  removed {dropped} duplicate shapes', file=sys.stderr)
 # height: real where known, otherwise borrowed from neighbours, otherwise a regional rule
 known = []
 for r, p in polys:

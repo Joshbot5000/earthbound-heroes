@@ -140,7 +140,10 @@ export class SkySystem {
     if (useMoon) { this.sun.color.setRGB(0.55, 0.68, 1); inten = 0.22 * sm.phase * (1 - c.cloud * 0.7) * smooth(0.03, 0.3, sm.moon.alt); }
     this.sun.intensity = inten; this.sun.castShadow = inten > 0.05;
     const tgt = G.player ? G.player.pos : cam.position;
-    this.sun.target.position.copy(tgt); this.sun.position.copy(tgt).addScaledVector(dir.y > 0.05 ? dir : new THREE.Vector3(dir.x, 0.05, dir.z).normalize(), 400);
+    const ld = dir.y > 0.05 ? dir : new THREE.Vector3(dir.x, 0.05, dir.z).normalize(), sc = this.sun.shadow.camera, texel = (sc.right - sc.left) / this.sun.shadow.mapSize.x;
+    const su = new THREE.Vector3().crossVectors(ld, new THREE.Vector3(0, 1, 0)); if (su.lengthSq() < 1e-6) su.set(1, 0, 0); su.normalize(); const sv = new THREE.Vector3().crossVectors(su, ld).normalize();
+    const pu = tgt.dot(su), pv = tgt.dot(sv), snapped = tgt.clone().addScaledVector(su, Math.round(pu / texel) * texel - pu).addScaledVector(sv, Math.round(pv / texel) * texel - pv);
+    this.sun.target.position.copy(snapped); this.sun.position.copy(snapped).addScaledVector(ld, 400);
     this.flash = Math.max(0, this.flash - dt * 4);
     if (w.thunder && Math.random() < dt * 0.12) { this.flash = 1; G.audio && G.audio.thunder(); }
     const glow = this.cityGlow || 0;   // light pollution: cities never go fully dark

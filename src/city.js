@@ -58,10 +58,10 @@ export const City = {
       const rings = [], verts = [];
       for (let i = 0; i < N; i++) {
         roof[i] = dv.getUint8(p); cls[i] = dv.getUint8(p + 1); hgt[i] = dv.getUint16(p + 2, true) / 10; minh[i] = dv.getUint16(p + 4, true) / 10; col[i] = dv.getUint16(p + 6, true); mat[i] = dv.getUint8(p + 8);
-        const nr = dv.getUint8(p + 9); name[i] = dv.getUint16(p + 10, true); p += 12; ringStart[i] = rings.length;
+        const nr = dv.getUint8(p + 9); name[i] = dv.getUint16(p + 10, true); p += 12; ringStart[i] = rings.length / 2;
         for (let r = 0; r < nr; r++) { const nv = dv.getUint16(p, true); p += 2; rings.push(verts.length / 2, nv); for (let k = 0; k < nv; k++) { verts.push(dv.getInt16(p, true) * q, dv.getInt16(p + 2, true) * q); p += 4; } }
       }
-      ringStart[N] = rings.length;
+      ringStart[N] = rings.length / 2;
       c.b = { N, roof, cls, hgt, minh, col, mat, name, ringStart, rings: Uint32Array.from(rings), local: Float32Array.from(verts) };
     }
     // roads: edges between junctions

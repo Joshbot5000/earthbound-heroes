@@ -11,8 +11,8 @@ export const HEROES = [
   { id: 'vesper', name: 'VESPER', title: 'The Weaver', color: '#37f5d6', rope: 0xd8fff8, melee: 1.15,
     blurb: 'Swings between towers on silk lines. Fast, acrobatic, built for the skyline.',
     look: { suit: 0x1a1d24, second: 0x10343a, pattern: 'web', glowK: 1.6, helmet: true, lenses: 0x9ffff0, accent: 0x37f5d6, accentGlow: 2.2, gloves: 0x101214, boots: 0x101214, emblem: true, rough: 0.38 },
-    traverse: 'Silk Swing', tip: 'Hold in the air near buildings, release at the top of the arc',
-    powers: [{ name: 'Zip Line', fn: 'zip', cost: 10, cd: 0.8, icon: '➶' }, { name: 'Web Burst', fn: 'webBurst', cost: 30, cd: 6, icon: '✺' }, { name: 'Silk Storm', fn: 'silkStorm', cost: 60, cd: 16, icon: '❋' }] },
+    traverse: 'Silk Swing', tip: 'Hold E to swing, steer hard or tap E to turn, Space to launch, hold Space to glide',
+    powers: [{ name: 'Zip Line', fn: 'zip', cost: 8, cd: 0.45, icon: '➶' }, { name: 'Web Burst', fn: 'webBurst', cost: 30, cd: 6, icon: '✺' }, { name: 'Silk Storm', fn: 'silkStorm', cost: 60, cd: 16, icon: '❋' }] },
   { id: 'cinder', name: 'CINDER', title: 'Hellfire Warden', color: '#ff7a2a', rope: 0xff8a30, armor: 0.75,
     blurb: 'Flies on jets of flame and drags enemies around on burning chains.',
     look: { suit: 0x1c0d0a, second: 0x121214, pattern: 'magma', glowK: 2.2, helmet: true, helmetMat: 0x1a0c08, lenses: 0xff7a1a, accent: 0xff6a1a, accentGlow: 3, gloves: 0x2a1a14, boots: 0x18100c, emblem: true, scale: 1.06, metal: 0.35 },
@@ -97,9 +97,13 @@ export class Powers {
 
   // ---------- Vesper ----------
   zip() {
-    const p = this.pl, a = p.aim(170); if (!a.hit) { G.ui.toast('Aim at a surface to zip'); return false; }
+    const p = this.pl, a = p.aim(170);
+    // nothing to grab: a web-zip dash in the direction you are looking
+    if (!a.hit) { p.endSwing(false); const d = a.dir; p.vel.set(d.x * 30, Math.max(d.y * 30, 3), d.z * 30); p.grounded = false; G.audio.thwip(); G.fx.ring(p.pos.clone().setY(p.pos.y + 1), p.hero.rope, 2.5, 0.25); return; }
     p.endSwing(false); const to = a.point.clone().addScaledVector(a.dir, -0.9); to.y += a.ny > 0.5 ? 0.6 : 1.2;
-    p.zip = { to, t: 0 }; p.rope.visible = true; if (p.grounded) { p.pos.y += 0.3; p.grounded = false; } G.audio.thwip(); G.fx.burst(to, p.hero.rope, 10, 3, 0.3, 1.2);
+    // aimed at (or just below) a rooftop edge: arrive on the edge and catapult over it
+    const perch = a.ny > 0.5 || (a.box && a.point.y > a.box.maxy - 4); if (perch && a.box) to.y = Math.max(to.y, a.box.maxy + 0.8);
+    p.zip = { to, t: 0, perch }; p.rope.visible = true; if (p.grounded) { p.pos.y += 0.3; p.grounded = false; } G.audio.thwip(); G.fx.burst(to, p.hero.rope, 10, 3, 0.3, 1.2);
   }
   webBurst() {
     const p = this.pl, f = this.camF(true), h = this.hand(); let n = 0;

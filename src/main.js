@@ -18,13 +18,16 @@ import { City } from './city.js';
 import { Props } from './props.js';
 import { Landmarks } from './landmarks.js';
 import { setVehicleLights } from './vehicles.js';
+import { Weapons } from './weapons.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
+import { N8AOPass } from 'n8ao';
 
 const $ = id => document.getElementById(id), qs = new URLSearchParams(location.search);
 const PRESETS = {
   Low: { buildR: 4, groundR: 2, propR: 2, farCells: 44, groundSeg: 10, treeDensity: 18, cars: 7, peds: 8, bloom: false, msaa: 0, dpr: 1.1, shadow: 1024, lampLights: 3 },
   Medium: { buildR: 6, groundR: 3, propR: 2, farCells: 52, groundSeg: 12, treeDensity: 26, cars: 10, peds: 12, bloom: true, msaa: 0, dpr: 1.5, shadow: 1024, lampLights: 4 },
-  High: { buildR: 8, groundR: 4, propR: 3, farCells: 76, groundSeg: 14, treeDensity: 40, cars: 15, peds: 18, bloom: true, msaa: 4, dpr: 2, shadow: 2048, lampLights: 8 },
+  High: { buildR: 8, groundR: 4, propR: 3, farCells: 76, groundSeg: 14, treeDensity: 40, cars: 15, peds: 18, bloom: true, msaa: 4, dpr: 2, shadow: 2048, lampLights: 8, ao: true },
 };
 const mobile = isTouch();
 let qName = 'Auto'; try { qName = localStorage.getItem('eh.q') || 'Auto'; } catch (e) { }
@@ -45,20 +48,27 @@ async function boot() {
   let composer = null, bloom = null;
   if (q.bloom) {
     const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: q.msaa });
-    composer = new EffectComposer(renderer, rt); composer.addPass(new RenderPass(scene, camera));
+    composer = new EffectComposer(renderer, rt);
+    if (q.ao) {
+      // ambient occlusion: soft shadow where walls meet the ground, in corners and under cars
+      const ao = new N8AOPass(scene, camera, innerWidth, innerHeight); ao.setQualityMode('Performance');
+      Object.assign(ao.configuration, { aoRadius: 3.5, distanceFalloff: 1.2, intensity: 2.2, halfRes: true, depthAwareUpsampling: true, gammaCorrection: false });
+      composer.addPass(ao); G.aoPass = ao;
+    } else composer.addPass(new RenderPass(scene, camera));
     bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.35, 0.6, 0.92); composer.addPass(bloom); composer.addPass(new OutputPass());
     // gentle grade: lift shadows a touch, warm highlights, vignette
     composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null }, uV: { value: 0.32 } }, vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: 'uniform sampler2D tDiffuse; uniform float uV; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); vec2 d = vUv - 0.5; float v = 1.0 - uV * dot(d, d) * 2.2; vec3 g = c.rgb * v; g = mix(g, g * vec3(1.03, 1.0, 0.96), smoothstep(0.4, 1.0, dot(g, vec3(0.33)))); gl_FragColor = vec4(g, c.a); }' }));
+    if (!q.msaa || q.ao) composer.addPass(new FXAAPass());   // smooth jagged edges where hardware multisampling is off
   }
   const resize = () => { const w = innerWidth, h = innerHeight; renderer.setPixelRatio(baseDpr * scale); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); if (composer) { composer.setPixelRatio(baseDpr * scale); composer.setSize(w, h); } };
   addEventListener('resize', resize); addEventListener('orientationchange', () => setTimeout(resize, 200));
 
   G.audio = new Audio(); G.fx = new FX(scene); G.sky = new SkySystem(scene, renderer, mobile); G.world = new World(scene, q);
-  G.props = new Props(scene, q); G.ents = new Ents(q); G.wanted = new Wanted(); G.ui = new UI(); G.player = new Player(HEROES); G.powers = new Powers();
+  G.props = new Props(scene, q); G.ents = new Ents(q); G.wanted = new Wanted(); G.ui = new UI(); G.player = new Player(HEROES); G.powers = new Powers(); G.weapons = new Weapons(); G.weapons.select(0);
   if (qs.get('t')) G.sky.timeOffset = +qs.get('t');
 
-  G.setHero = i => { G.player.setHero(i); G.ui.setHero(HEROES[i], i); };
+  G.setHero = i => { G.player.setHero(i); G.ui.setHero(HEROES[i], i); G.weapons && G.weapons.attachModel(G.weapons.current); };
   G.cycleHero = () => { if (G.player.mode !== 'foot') return; G.setHero((G.player.heroIndex + 1) % HEROES.length); const h = G.player.hero; G.ui.toast(`${h.name} · ${h.title}`, `${h.traverse}: ${h.tip}`); G.fx.burst(G.player.pos.clone().setY(G.player.pos.y + 1), h.rope, 40, 6, 0.6, 1.4); };
   G.onDefeat = n => { G.stats.defeated++; if (n.kind === 'thug') { G.stats.renown += n.heavy ? 25 : 10; G.player.energy = Math.min(100, G.player.energy + 12); } };
   G.onGangCleared = () => { G.stats.crews++; G.stats.renown += 100; G.ui.toast('Crew cleared', '+100 renown'); };
@@ -89,7 +99,8 @@ async function boot() {
       persist(); $('loading').style.opacity = 0; setTimeout(() => $('loading').style.display = 'none', 500);
     }, 60);
   };
-  const setState = s => { G.state = s; $('hud').classList.toggle('on', s === 'play'); $('title').classList.toggle('on', s === 'title'); $('mapScreen').classList.toggle('on', s === 'map'); $('pause').classList.toggle('on', s === 'pause'); if (s !== 'play' && document.pointerLockElement) document.exitPointerLock(); };
+  const setState = s => { G.state = s; $('hud').classList.toggle('on', s === 'play'); $('title').classList.toggle('on', s === 'title'); $('mapScreen').classList.toggle('on', s === 'map'); $('pause').classList.toggle('on', s === 'pause'); $('arsenal').classList.toggle('on', s === 'arsenal'); if (s !== 'play' && document.pointerLockElement) document.exitPointerLock(); };
+  G.setState = setState;
   G.openMap = () => { G.ui.map.open(Geo.toLat(G.player.pos.z), Geo.toLon(G.player.pos.x)); setState('map'); };
   G.closeMap = () => { G.audio.start(); setState('play'); };
   G.setPause = on => { if (on) $('stats').textContent = `Renown ${G.stats.renown} · Crews cleared ${G.stats.crews} · Defeated ${G.stats.defeated} · Shards ${G.stats.orbs} · Infected ${G.stats.infected}`; setState(on ? 'pause' : 'play'); };
@@ -113,14 +124,14 @@ async function boot() {
     requestAnimationFrame(frame);
     const raw = (now - last) / 1000; last = now; const dt = Math.min(0.05, raw);
     if (G.state === 'map') { G.ui.map.render(renderer); return; }
-    if (G.state === 'pause') return;
+    if (G.state === 'pause' || G.state === 'arsenal') return;
     G.time += dt; const I = G.input; G.ui.poll();
     if (G.state === 'title') { I.mx = I.my = 0; I.lookX = dt * 0.12; I.lookY = (0.12 - G.player.camPitch) * dt; for (const k in I.hit) I.hit[k] = false; }
-    G.player.update(dt); G.powers.update(dt); G.ents.update(dt); G.wanted.update(dt); G.props.update(dt); Landmarks.update(dt);
+    G.player.update(dt); G.weapons.update(dt); G.powers.update(dt); G.ents.update(dt); G.wanted.update(dt); G.props.update(dt); Landmarks.update(dt);
     G.world.update(G.player.pos.x, G.player.pos.z, mobile ? 5 : 7); G.sky.cityGlow = City.inside(G.player.pos.x, G.player.pos.z) ? 1 : Geo.urban(G.player.pos.x, G.player.pos.z); G.sky.update(dt, camera); G.world.setLighting(G.sky.night, G.powers.blackoutT > 0); setVehicleLights(G.sky.night);
     G.fx.update(dt); G.audio.frame(dt); if (G.state === 'play') G.ui.frame(dt);
     I.lookX = I.lookY = 0; for (const k in I.hit) I.hit[k] = false;
-    if (bloom) { const n = G.sky.night; bloom.strength = 0.1 + n * 0.55; bloom.threshold = 8 - n * 7.1; bloom.radius = 0.5; }
+    if (bloom) { const n = G.sky.night; bloom.enabled = n > 0.15; bloom.strength = n * 0.6; bloom.threshold = 1.6 - n * 0.7; bloom.radius = 0.5; }
     if (composer) composer.render(); else renderer.render(scene, camera);
     // dynamic resolution keeps the frame rate up on slower devices
     acc += raw; frames++;

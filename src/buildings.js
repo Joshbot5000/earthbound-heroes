@@ -116,6 +116,13 @@ export function facadeMaterial(T, opts = {}) {
           float far = smoothstep(0.08, 0.35, aaw);
           vec2 wa = vec2((A.x - A.z) * 0.5, B.x), wb = vec2((A.x + A.z) * 0.5, B.x + A.w);
           float win = box(vec2(fu, fv), wa, wb, vec2(aaw));
+          // the glass sits 16 cm behind the wall: parallax-shift it so each window has a visible reveal
+          vec3 dpx = dFdx(vWP), dpy = dFdy(vWP); vec3 Tw = dpx * dFdy(vF.y) - dpy * dFdx(vF.y); Tw = Tw / (length(Tw) + 1e-6);
+          vec3 Vw = normalize(cameraPosition - vWP); vec3 Nw = normalize(vWN);
+          vec2 par = vec2(dot(Vw, Tw), Vw.y) / max(dot(Vw, Nw), 0.3) * 0.16;
+          float winIn = box(vec2(fu, fv) - par, wa + 0.03, wb - 0.03, vec2(aaw));
+          float reveal = clamp(win - winIn, 0.0, 1.0) * (1.0 - curtain);
+          win = mix(win * winIn, win, curtain);
           if (B.w > 0.5) { vec2 c = vec2(A.x * 0.5, B.x + A.w - A.z * 0.5); float arch = 1.0 - smoothstep(A.z * 0.5 - aaw, A.z * 0.5 + aaw, length((vec2(fu, fv) - c) * vec2(1.0, 1.0))); win = max(box(vec2(fu, fv), wa, vec2(wb.x, c.y), vec2(aaw)), arch * step(c.y, fv)); }
           float frame = box(vec2(fu, fv), wa - B.z * 1.6, wb + B.z * 1.6, vec2(aaw)) - win;
           float wid = h1(vec2(bay + seed * 91.0, fl + seed * 37.0));
@@ -159,6 +166,7 @@ export function facadeMaterial(T, opts = {}) {
           if (curtain > 0.5) glass = mix(glass, vColor.rgb * 0.45, 0.6);
           if (wid > 0.82 && curtain < 0.5) glass = mix(glass, vec3(0.55, 0.5, 0.42), 0.5);          // curtains drawn
           diffuseColor.rgb = mix(diffuseColor.rgb, glass, win);
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.5, reveal * inBays * (1.0 - far));
           fGlass = win; fLit = win * step(wid, uLit) * (0.35 + wid);
           // weather: grime at street level, monsoon streaks in tropical cities, rain darkening
           diffuseColor.rgb *= 1.0 - 0.28 * exp(-v / 1.6);
@@ -211,7 +219,7 @@ export class MeshBuilder {
   tri(a, b, c) { this.i.push(a, b, c); }
   // footprint rings (flat [x,z,...] arrays, first = outer), y0..y1 with ground level g
   building(o) {
-    const { rings, y0, y1, g, col, roofCol, style, tex, seed, shop } = o, H = y1 - g; const B = [style, seed, tex, 0];
+    const { rings, y0, g, col, roofCol, style, tex, seed, shop } = o, y1 = o.y1 + seed * 0.06, H = y1 - g; const B = [style, seed, tex, 0];
     const outer = rings[0], a0 = AREA(outer);
     let roof = o.roof || 0, ob = null;
     if (roof) { ob = rings.length === 1 ? obb(outer) : null; if (!ob || Math.abs(a0) / ob.area < 0.82 || ob.hb < 2.5) roof = 0; }
@@ -268,7 +276,10 @@ export class MeshBuilder {
     const B = [Bs[0], Bs[1], Bs[2], 2], V2 = THREE.Vector2, outer = [], holes = [];
     const pts = r => { const a = []; for (let i = 0; i < r.length; i += 2) a.push(new V2(r[i], r[i + 1])); return a; };
     rings.forEach((r, i) => i ? holes.push(pts(r)) : outer.push(...pts(r)));
-    let tris; try { tris = THREE.ShapeUtils.triangulateShape(outer, holes); } catch (e) { return; }
+    let tris = null; try { tris = THREE.ShapeUtils.triangulateShape(outer, holes); } catch (e) { tris = null; }
+    // never leave a building without a roof: fall back to the outline alone, then to a fan
+    if (!tris || !tris.length) { try { tris = THREE.ShapeUtils.triangulateShape(outer, []); holes.length = 0; } catch (e) { tris = null; } }
+    if (!tris || !tris.length) { tris = []; holes.length = 0; for (let i = 1; i < outer.length - 1; i++) tris.push([0, i, i + 1]); }
     const all = outer.concat(...holes), base = all.map(p => this.v(p.x, y, p.y, 0, 1, 0, p.x, p.y, 1e3, 1e3, col, B));
     for (const t of tris) {
       const [a, b, c] = t, A = all[a], Bp = all[b], C = all[c], cr = (Bp.x - A.x) * (C.y - A.y) - (Bp.y - A.y) * (C.x - A.x);

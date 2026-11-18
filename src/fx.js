@@ -43,14 +43,17 @@ export class FX {
     const m = new THREE.Mesh(new THREE.TorusGeometry(1, 0.06, 6, 40), new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
     m.rotation.x = Math.PI / 2; m.position.copy(p); return this.add(m, life, (x, t) => { const s = 1 + (radius - 1) * (1 - (1 - t) * (1 - t)); x.scale.set(s, s, s * 2); x.material.opacity = 1 - t; });
   }
+  // a fixed pool of lights reused for every flash: adding lights at runtime would recompile every shader
   flash(p, color, intensity, life) {
-    const l = new THREE.PointLight(color, intensity, 90, 1.6); l.position.copy(p); return this.add(l, life, (x, t) => { x.intensity = intensity * (1 - t); });
+    if (!this.lights) { this.lights = []; for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0xffffff, 0, 90, 1.6); this.scene.add(l); this.lights.push({ l, t: 0, life: 1, i0: 0 }); } this.li = 0; }
+    const L = this.lights[this.li = (this.li + 1) % this.lights.length]; L.l.position.copy(p); L.l.color.set(color); L.i0 = intensity; L.t = 0; L.life = life; L.l.intensity = intensity;
   }
   explosion(p, big = 1) {
     this.burst(p, 0xffb040, 60 * big, 16 * big, 0.9, 2.2 * big, 6, 1); this.burst(p, 0xff4010, 40 * big, 8 * big, 1.4, 3.2 * big, -3, 1.5); this.burst(p, 0x555555, 30, 5, 2.4, 3, -2, 2);
     this.ring(p, 0xffc070, 12 * big, 0.5); this.flash(p, 0xff9040, 400 * big, 0.5); G.audio && G.audio.boom(p); G.shake = Math.max(G.shake || 0, 0.8 * big / (1 + G.player.pos.distanceTo(p) / 25));
   }
   update(dt) {
+    if (this.lights) for (const L of this.lights) { if (L.l.intensity <= 0) continue; L.t += dt; L.l.intensity = L.t >= L.life ? 0 : L.i0 * (1 - L.t / L.life); }
     const { pos, vel, life, max, col, base, grav } = this;
     for (let k = 0; k < N; k++) {
       if (life[k] <= 0) { if (col[k * 4 + 3] !== 0) col[k * 4 + 3] = 0; continue; }

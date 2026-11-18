@@ -25,6 +25,24 @@ export class Audio {
   land() { this.noise(0.25, 0.4, 220); this.tone(70, 0.2, 'sine', 0.3, 35); }
   hit(p, k = 0.6) { const v = this.vol(p) * k; this.noise(0.09, 0.5 * v, 900); this.tone(130, 0.1, 'square', 0.14 * v, 55); }
   shot(p) { const v = this.vol(p); this.noise(0.12, 0.45 * v, 2400, 'lowpass', 300); }
+  // each weapon has its own voice: a crack, a body and a tail
+  gun(kind, p) {
+    if (!this.ctx) return; const v = this.vol(p);
+    const K = { pistol: [0.14, 0.55, 3000, 900, 180, 0.15], smg: [0.08, 0.4, 3600, 1400, 220, 0.08], rifle: [0.16, 0.6, 3200, 700, 140, 0.18], shotgun: [0.4, 0.9, 1800, 260, 70, 0.4],
+      minigun: [0.06, 0.35, 3800, 1600, 260, 0.05], sniper: [0.9, 1.0, 4200, 300, 60, 0.6], rocket: [0.7, 0.6, 900, 180, 60, 0.3], thump: [0.25, 0.6, 600, 120, 80, 0.15] }[kind];
+    if (kind === 'rail') { this.tone(180, 0.5, 'sawtooth', 0.25 * v, 2400); this.noise(0.4, 0.5 * v, 6000, 'highpass'); this.tone(60, 0.6, 'sine', 0.5 * v, 30); return; }
+    if (kind === 'arc') { for (let i = 0; i < 3; i++) this.tone(800 + Math.random() * 1600, 0.12, 'square', 0.08 * v, 120 + Math.random() * 400); this.noise(0.2, 0.3 * v, 5000, 'highpass'); return; }
+    if (kind === 'flame') { this.noise(0.12, 0.12 * v, 700, 'lowpass', 300); return; }
+    if (!K) return this.shot(p);
+    const [dur, vol, f0, f1, low, tail] = K;
+    this.noise(dur, vol * v, f0, 'lowpass', f1); this.tone(low, dur * 0.8, 'sine', vol * 0.6 * v, low * 0.4);
+    if (tail) this.noise(tail * 3, vol * 0.12 * v, 900, 'bandpass', 300);   // echo off the buildings
+  }
+  click() { this.tone(2400, 0.03, 'square', 0.05); this.noise(0.04, 0.12, 4000, 'highpass'); }
+  reload() { this.noise(0.06, 0.15, 2000, 'bandpass'); setTimeout(() => this.noise(0.08, 0.2, 1500, 'bandpass'), 260); }
+  ping(p) { const v = this.vol(p); this.tone(2600 + Math.random() * 1600, 0.15, 'sine', 0.05 * v, 1800); }
+  spin() { if (this.spinT && this.ctx.currentTime < this.spinT) return; this.spinT = this.ctx.currentTime + 0.12; this.tone(220, 0.12, 'sawtooth', 0.04, 520); }
+  hitmark(kill) { this.tone(kill ? 1200 : 1800, 0.06, 'square', 0.05, kill ? 600 : 2200); }
   crash(p, s) { const v = this.vol(p) * clamp(s / 20, 0.2, 1); this.noise(0.4, 0.6 * v, 1800, 'lowpass', 150); this.tone(90, 0.25, 'sawtooth', 0.15 * v, 40); }
   boom(p, k = 1) { const v = this.vol(p) * k; this.noise(1.1, 0.9 * v, 900, 'lowpass', 50); this.tone(55, 0.8, 'sine', 0.7 * v, 22); }
   shatter(p) { const v = this.vol(p); this.noise(0.3, 0.3 * v, 5000, 'highpass'); this.tone(2400, 0.2, 'triangle', 0.06 * v, 5200); }

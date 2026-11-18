@@ -49,15 +49,28 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 #toasts{left:50%;top:calc(58px + var(--sat));transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;align-items:center;width:min(92vw,420px)}
 .toast{padding:8px 14px;text-align:center;animation:tin .25s ease-out}.toast b{display:block}.toast span{color:var(--dim);font-size:12px}@keyframes tin{from{opacity:0;transform:translateY(-8px)}}
 #cross{left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:rgba(255,255,255,.75);box-shadow:0 0 0 1px rgba(0,0,0,.4)}
+#xhair{left:50%;top:50%;width:0;height:0;display:none}#xhair i{position:absolute;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.45);border-radius:1px}
+#xhair i:nth-child(1),#xhair i:nth-child(2){width:2px;height:9px;left:-1px}#xhair i:nth-child(3),#xhair i:nth-child(4){height:2px;width:9px;top:-1px}
+#hitm{left:50%;top:50%;width:30px;height:30px;margin:-15px;opacity:0;transition:opacity .15s}#hitm::before,#hitm::after{content:"";position:absolute;left:14px;top:-2px;width:2px;height:34px;background:#fff;transform:rotate(45deg)}#hitm::after{transform:rotate(-45deg)}#hitm.kill::before,#hitm.kill::after{background:#ff4a4a}
+#scope{inset:0;display:none;background:radial-gradient(circle at center,transparent 0,transparent 31vmin,rgba(0,0,0,.92) 31.5vmin)}#scope::before,#scope::after{content:"";position:absolute;background:rgba(0,0,0,.8)}#scope::before{left:50%;top:15%;bottom:15%;width:1px}#scope::after{top:50%;left:25%;right:25%;height:1px}
+#wpn{right:calc(16px + var(--sar));bottom:calc(64px + var(--sab));padding:8px 12px;text-align:right;min-width:150px;display:none}#wpn b{display:block;font-size:13px;letter-spacing:.06em}#wpn span{font:800 24px/1.1 ui-sans-serif,system-ui;font-variant-numeric:tabular-nums}#wpn span small{font-size:12px;color:var(--dim);font-weight:500}
+#wpn .rl{height:3px;background:rgba(255,255,255,.15);border-radius:2px;margin-top:4px;overflow:hidden}#wpn .rl i{display:block;height:100%;background:var(--hero);width:0}
+#slots{right:calc(16px + var(--sar));bottom:calc(16px + var(--sab));display:flex;gap:4px;pointer-events:auto}#slots button{width:40px;height:38px;border-radius:9px;font:700 10px ui-sans-serif,system-ui;color:var(--dim);padding:0;line-height:1.1}#slots button.on{color:#04110f;background:var(--hero);border-color:transparent}
+#feed{right:calc(16px + var(--sar));top:calc(160px + var(--sat));display:flex;flex-direction:column;gap:4px;align-items:flex-end}#feed div{padding:4px 9px;font-size:12px;animation:tin .2s ease-out}#feed div b{color:#ff6a6a}
+#arsenal{align-items:center;justify-content:center;background:rgba(5,7,12,.82);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:14px;overflow:auto}
+#arsBox{width:min(980px,100%);max-height:100%;overflow:auto;padding:16px}#arsBox h2{margin:0 0 4px}#arsBox p{color:var(--dim);margin:0 0 12px;font-size:13px}
+#arsSlots{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}#arsSlots button{flex:1;min-width:120px;padding:9px;border-radius:12px;text-align:left}#arsSlots button.sel{border-color:var(--hero);box-shadow:0 0 0 1px var(--hero)}#arsSlots small{display:block;color:var(--dim);font-size:11px}
+#arsGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}.wcard{padding:10px 12px;border-radius:12px;text-align:left}.wcard.in{border-color:var(--hero)}.wcard b{display:block}.wcard i{display:block;font-style:normal;color:var(--dim);font-size:12px;margin:3px 0 7px;min-height:30px}
+.st{display:grid;grid-template-columns:52px 1fr;gap:3px 6px;font-size:11px;color:var(--dim);align-items:center}.st u{display:block;height:5px;border-radius:3px;background:rgba(255,255,255,.12);text-decoration:none;overflow:hidden}.st u s{display:block;height:100%;background:var(--hero);text-decoration:none}
 #hurt{inset:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(255,20,40,.55));opacity:0;transition:opacity .25s}
 #stickZone{left:0;bottom:0;width:45%;height:62%;pointer-events:auto;display:none}
 #stick{width:120px;height:120px;border-radius:50%;border:2px solid rgba(255,255,255,.22);background:rgba(255,255,255,.05);display:none;transform:translate(-50%,-50%)}
 #stick i{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px;border-radius:50%;background:rgba(255,255,255,.3)}
-#tb{right:calc(10px + var(--sar));bottom:calc(10px + var(--sab));width:232px;height:210px;display:none;pointer-events:none}
+#tb{right:calc(10px + var(--sar));bottom:calc(10px + var(--sab));width:240px;height:240px;display:none;pointer-events:none}.touch #slots{display:none}.touch #wpn{right:auto;left:calc(12px + var(--sal));bottom:auto;top:calc(150px + var(--sat));text-align:left;min-width:120px}
 .tbn{position:absolute;border-radius:50%;pointer-events:auto;font-weight:800;font-size:11px;letter-spacing:.05em;display:grid;place-items:center;background:rgba(10,14,22,.5);border:1.5px solid rgba(255,255,255,.28);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .tbn.dn{background:rgba(255,255,255,.3)}
 #t-jump{right:0;bottom:0;width:86px;height:86px}#t-trav{right:92px;bottom:8px;width:76px;height:76px;border-color:var(--hero);color:var(--hero)}
-#t-atk{right:20px;bottom:94px;width:70px;height:70px}#t-dodge{right:98px;bottom:92px;width:54px;height:54px}#t-use{right:160px;bottom:66px;width:54px;height:54px;display:none;border-color:#ffd24a;color:#ffd24a}
+#t-atk{right:22px;bottom:96px;width:58px;height:58px}#t-fire{right:96px;bottom:150px;width:78px;height:78px;border-color:#ff6a5a;color:#ff8a7a;display:none}#t-aim{right:184px;bottom:170px;width:48px;height:48px;display:none}#t-wpn{right:4px;bottom:164px;width:50px;height:50px}#t-aim.on{background:rgba(255,255,255,.3)}#t-dodge{right:98px;bottom:92px;width:54px;height:54px}#t-use{right:160px;bottom:66px;width:54px;height:54px;display:none;border-color:#ffd24a;color:#ffd24a}
 .touch #stickZone,.touch #tb{display:block}.touch #cross{opacity:.5}.touch .pw kbd{display:none}
 .touch #powers{left:auto;right:calc(250px + var(--sar));transform:none;bottom:calc(12px + var(--sab))}.touch .pw{width:54px;height:54px}.touch .pw b{line-height:34px;font-size:21px}
 .touch #bars{bottom:auto;top:calc(66px + var(--sat));width:170px}
@@ -106,10 +119,12 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   <div id="speedo">0<small>km/h</small></div>
   <div id="prompt" class="glass"></div>
   <div id="toasts"></div>
-  <div id="cross"></div>
+  <div id="cross"></div><div id="xhair"><i></i><i></i><i></i><i></i></div><div id="hitm"></div><div id="scope"></div>
+  <div id="wpn" class="glass"><b id="wname">Fists</b><span id="wammo"></span><div class="rl"><i id="wrl"></i></div></div>
+  <div id="slots"></div><div id="feed"></div>
   <div id="hurt"></div>
   <div id="stickZone"></div><div id="stick"><i></i></div>
-  <div id="tb"><button class="tbn" id="t-jump">JUMP</button><button class="tbn" id="t-trav">HOLD</button><button class="tbn" id="t-atk">HIT</button><button class="tbn" id="t-dodge">DODGE</button><button class="tbn" id="t-use">CAR</button></div>
+  <div id="tb"><button class="tbn" id="t-jump">JUMP</button><button class="tbn" id="t-trav">HOLD</button><button class="tbn" id="t-atk">HIT</button><button class="tbn" id="t-dodge">DODGE</button><button class="tbn" id="t-use">CAR</button><button class="tbn" id="t-fire">FIRE</button><button class="tbn" id="t-aim">AIM</button><button class="tbn" id="t-wpn">GUN</button></div>
 </div>
 <div id="title" class="screen">
   <h1>EARTHBOUND <em>HEROES</em></h1>
@@ -123,12 +138,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   <div id="results" class="glass"></div>
   <div id="mapInfo" class="glass"><b id="mi-t">Tap anywhere on Earth</b><span id="mi-s">Drag to spin, pinch or scroll to zoom</span><div><button class="btn primary" id="m-go" style="display:none">Travel here</button><button class="btn glass" id="m-city" style="display:none"></button></div></div>
 </div></div>
+<div id="arsenal" class="screen"><div id="arsBox" class="glass"><h2>Arsenal</h2><p>Choose a slot, then pick a weapon for it. Slots 1–5 are on the number keys; 0 is your fists.</p><div id="arsSlots"></div><div id="arsGrid"></div><div class="row" style="margin-top:12px;display:flex;gap:8px"><button class="btn primary" id="ars-done">Done</button><button class="btn glass" id="ars-reset">Default loadout</button></div></div></div>
 <div id="pause" class="screen"><div id="pauseBox" class="glass">
   <h2>Paused</h2>
   <div id="stats"></div>
   <p style="color:var(--dim);font-size:11px;margin:0 0 10px">Map data © OpenStreetMap contributors (ODbL) via Overture Maps Foundation. Coastlines and cities: Natural Earth. Imagery and elevation: NASA. Weather: Open-Meteo.</p>
   <table id="keys"></table>
-  <div class="row"><button class="btn primary" id="p-resume">Resume</button><button class="btn glass" id="p-map">World map</button><button class="btn glass" id="p-q">Graphics: Auto</button><button class="btn glass" id="p-mute">Sound: On</button></div>
+  <div class="row"><button class="btn primary" id="p-resume">Resume</button><button class="btn glass" id="p-map">World map</button><button class="btn glass" id="p-ars">Arsenal</button><button class="btn glass" id="p-q">Graphics: Auto</button><button class="btn glass" id="p-mute">Sound: On</button></div>
 </div></div>
 <div id="loading"><div><b>Earthbound Heroes</b><span id="loadMsg">Loading the planet…</span></div></div>
 <script>/*BUNDLE*/</script>
