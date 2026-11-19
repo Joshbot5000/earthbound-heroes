@@ -49,8 +49,8 @@ export class FX {
     const L = this.lights[this.li = (this.li + 1) % this.lights.length]; L.l.position.copy(p); L.l.color.set(color); L.i0 = intensity; L.t = 0; L.life = life; L.l.intensity = intensity;
   }
   explosion(p, big = 1) {
-    this.burst(p, 0xffb040, 60 * big, 16 * big, 0.9, 2.2 * big, 6, 1); this.burst(p, 0xff4010, 40 * big, 8 * big, 1.4, 3.2 * big, -3, 1.5); this.burst(p, 0x555555, 30, 5, 2.4, 3, -2, 2);
-    this.ring(p, 0xffc070, 12 * big, 0.5); this.flash(p, 0xff9040, 400 * big, 0.5); G.audio && G.audio.boom(p); G.shake = Math.max(G.shake || 0, 0.8 * big / (1 + G.player.pos.distanceTo(p) / 25));
+    if (G.vfx) G.vfx.explosion(p, big); else { this.burst(p, 0xffb040, 60 * big, 16 * big, 0.9, 2.2 * big, 6, 1); this.ring(p, 0xffc070, 12 * big, 0.5); }
+    this.flash(p, 0xff9040, 400 * big, 0.5); G.audio && G.audio.boom(p); G.shake = Math.max(G.shake || 0, 0.8 * big / (1 + G.player.pos.distanceTo(p) / 25));
   }
   update(dt) {
     if (this.lights) for (const L of this.lights) { if (L.l.intensity <= 0) continue; L.t += dt; L.l.intensity = L.t >= L.life ? 0 : L.i0 * (1 - L.t / L.life); }

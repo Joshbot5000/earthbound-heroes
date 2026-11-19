@@ -39,7 +39,18 @@ export function gunModel(id) {
   else if (id === 'shotgun') { add(cyl(0.022, 0.62), gunMat, 0, 0.05, 0.25); add(cyl(0.02, 0.3), gunMat2, 0, 0.0, 0.25); add(box(0.04, 0.09, 0.26), gunMat2, 0, -0.01, -0.16); muzzle = 0.56; }
   else if (id === 'minigun') { const sp = new THREE.Group(); sp.position.set(0, 0.04, 0); for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28; sp.add(part(cyl(0.012, 0.7), gunMat, Math.cos(a) * 0.04, Math.sin(a) * 0.04, 0.35)); } g.add(sp); add(cyl(0.07, 0.25), gunMat, 0, 0.04, 0.0); add(box(0.14, 0.14, 0.2), gunMat3, 0.1, -0.05, -0.05); muzzle = 0.72; g.userData.spinner = sp; }
   else if (id === 'sniper') { add(box(0.045, 0.07, 0.6), gunMat2, 0, 0.02, 0.1); add(cyl(0.014, 0.55), gunMat, 0, 0.04, 0.6); add(cyl(0.025, 0.28), gunMat, 0, 0.11, 0.12); add(box(0.04, 0.08, 0.2), gunMat2, 0, -0.01, -0.28); muzzle = 0.88; }
-  else if (id === 'rocket' || id === 'swarm') { add(cyl(id === 'swarm' ? 0.09 : 0.07, 1.05), id === 'swarm' ? gunMat : gunMat3, 0, 0.12, 0.15); add(box(0.04, 0.12, 0.05), gunMat, 0, -0.03, 0.05); add(box(0.04, 0.06, 0.12), gunMat, 0.07, 0.17, 0.2); muzzle = 0.68; }
+  else if (id === 'rocket') {
+    // shoulder-fired tube: flared ends, grip, sight, and a warhead peeking out of the front
+    add(cyl(0.075, 1.0, 14), gunMat3, 0, 0, 0.12); add(new THREE.CylinderGeometry(0.1, 0.078, 0.14, 14).rotateX(Math.PI / 2), gunMat, 0, 0, 0.66); add(new THREE.CylinderGeometry(0.078, 0.11, 0.16, 14).rotateX(Math.PI / 2), gunMat, 0, 0, -0.42);
+    for (const z of [-0.18, 0.38]) add(new THREE.TorusGeometry(0.078, 0.012, 6, 16), gunMat, 0, 0, z);
+    add(box(0.04, 0.14, 0.05), gunMat, 0, -0.12, 0.08, 0.2); add(box(0.04, 0.12, 0.05), gunMat, 0, -0.11, 0.34, 0.2); add(box(0.05, 0.07, 0.14), gunMat, 0.09, 0.07, 0.18); add(cyl(0.018, 0.1), glowMat, 0.09, 0.07, 0.26);
+    add(new THREE.ConeGeometry(0.06, 0.16, 12).rotateX(Math.PI / 2), gunMat2, 0, 0, 0.78); muzzle = 0.74; g.userData.shoulder = true; g.userData.warhead = g.children[g.children.length - 1];
+  }
+  else if (id === 'swarm') {
+    const pod = [[-0.055, 0.055], [0.055, 0.055], [-0.055, -0.055], [0.055, -0.055]]; add(box(0.24, 0.24, 0.9), gunMat, 0, 0, 0.1);
+    for (const [x, y] of pod) { add(cyl(0.045, 0.06, 12), glowMat, x, y, 0.56); }
+    add(box(0.04, 0.14, 0.05), gunMat, 0, -0.17, 0.1, 0.2); add(box(0.06, 0.06, 0.16), gunMat3, 0.15, 0.08, 0.2); muzzle = 0.6; g.userData.shoulder = true;
+  }
   else if (id === 'grenade') { add(cyl(0.05, 0.36), gunMat, 0, 0.05, 0.15); add(cyl(0.065, 0.16), gunMat3, 0, 0.05, 0.0); add(box(0.04, 0.12, 0.05), gunMat, 0, -0.04, 0.0); muzzle = 0.34; }
   else if (id === 'rail') { add(box(0.07, 0.09, 0.7), gunMat, 0, 0.04, 0.2); for (let i = 0; i < 4; i++) add(box(0.09, 0.02, 0.05), glowMat, 0, 0.09, 0.0 + i * 0.13); add(box(0.04, 0.12, 0.05), gunMat, 0, -0.05, 0.0); muzzle = 0.56; g.userData.glow = true; }
   else if (id === 'flame') { add(cyl(0.035, 0.55), gunMat, 0, 0.03, 0.2); add(cyl(0.06, 0.3), flameMat, 0.09, -0.05, -0.05); add(box(0.04, 0.12, 0.05), gunMat, 0, -0.05, 0.05); muzzle = 0.48; }
@@ -86,16 +97,25 @@ export class Weapons {
   attachModel(w) {
     if (this.held) { this.held.parent && this.held.parent.remove(this.held); this.held = null; }
     if (!w) return; const p = G.player; if (!p || !p.rig) return;
-    const m = this.models[w.id] || (this.models[w.id] = gunModel(w.id)); m.rotation.set(Math.PI / 2, 0, 0); m.position.set(0, -0.3, 0.035); p.rig.foreR.add(m); this.held = m;
+    const m = this.models[w.id] || (this.models[w.id] = gunModel(w.id));
+    if (m.userData.shoulder) { m.rotation.set(0, 0, 0); m.position.set(-0.2, 1.52, 0.02); m.scale.setScalar(1 / (p.rig.root.scale.x || 1)); p.rig.root.add(m); }
+    else { m.rotation.set(Math.PI / 2, 0, 0); m.position.set(0, -0.3, 0.035); p.rig.foreR.add(m); }
+    this.held = m;
   }
   // a pistol in the hand of a police officer or armed thug
   armNPC(n) { if (!n.gun || n.gunModel) return; const m = gunModel('pistol'); m.rotation.set(Math.PI / 2, 0, 0); m.position.set(0, -0.3, 0.035); m.scale.setScalar(1 / (n.rig.root.scale.x || 1)); n.rig.foreR.add(m); n.gunModel = m; }
-  muzzlePos(out) { const m = this.held; if (!m || G.player.mode !== 'foot') return out.copy(G.player.pos).setY(G.player.pos.y + 1.4); G.player.rig.root.updateMatrixWorld(true); return m.localToWorld(out.set(0, 0.04, m.userData.muzzle)); }
+  // where the shot leaves from: the real muzzle when the gun is up, else the point in front of the right shoulder
+  nominalMuzzle(out) { const p = G.player, cy = p.camYaw, cp = Math.cos(p.camPitch); return out.copy(p.pos).add(_a.set(Math.cos(cy) * 0.3 - Math.sin(cy) * cp * 0.7, 1.5 - Math.sin(p.camPitch) * 0.7, -Math.sin(cy) * 0.3 - Math.cos(cy) * cp * 0.7)); }
+  muzzlePos(out) {
+    const m = this.held; if (!m || G.player.mode !== 'foot') return out.copy(G.player.pos).setY(G.player.pos.y + 1.4);
+    G.player.rig.root.updateMatrixWorld(true); m.localToWorld(out.set(0, m.userData.shoulder ? 0 : 0.04, m.userData.muzzle));
+    const n = this.nominalMuzzle(_d); if (out.distanceTo(n) > 0.55) out.copy(n); return out;
+  }
   // ---------- per frame ----------
   update(dt) {
     const I = G.input, p = G.player, w = this.current, firing = !!(I.down.attack && w), canFire = !p.dead && G.state === 'play';
-    if (this.held && p.rig && this.held.parent !== p.rig.foreR) this.attachModel(w);
-    if (this.held) this.held.visible = p.mode === 'foot';
+    if (this.held && p.rig && this.held.parent !== (this.held.userData.shoulder ? p.rig.root : p.rig.foreR)) this.attachModel(w);
+    if (this.held) { this.held.visible = p.mode === 'foot'; if (this.held.userData.shoulder) { this.held.rotation.x = damp(this.held.rotation.x, clamp(p.camPitch - 0.12, -1, 1.1), 18, dt); if (this.held.userData.warhead) this.held.userData.warhead.visible = this.ammo[w.id] > 0 && this.reloadT <= 0; } }
     this.cool -= dt; this.firedT += dt; this.bloom = Math.max(0, this.bloom - dt * 3);
     this.aimK = damp(this.aimK, w && I.down.aim ? 1 : 0, 12, dt);
     if (I.hit.reload && w && this.ammo[w.id] < w.mag && this.reloadT <= 0) this.startReload(w);
@@ -155,51 +175,86 @@ export class Weapons {
     } else if (w.kind === 'rail') {
       const r = this.aimRay(w), skip = new Set(); let o = r.o, end = null;
       for (let k = 0; k < 12; k++) { const h = this.trace(o, r.d, w.range, skip); this.impact(w, h, r.d, muzzle, false); end = h.p; if (!h.ent || h.type === 'prop') break; skip.add(h.ent); o = h.p; }
-      G.fx.line(muzzle.clone(), end, 0x9fe8ff, 0.12, 0.5); G.fx.line(muzzle.clone(), end, 0xffffff, 0.04, 0.25);
-      for (let k = 0; k < 30; k++) G.fx.burst(_c.lerpVectors(muzzle, end, k / 30), 0x9fe8ff, 1, 1.5, 0.6, 1.2, 0, 0.3);
-      G.fx.burst(end, 0xbff4ff, 30, 8, 0.5, 1.2); p.vel.addScaledVector(r.d, -6);
+      const V0 = G.vfx, L = muzzle.distanceTo(end);
+      V0.beam('energy', muzzle.clone(), end.clone(), { width: 0.5, color: 0x3fb8ff, core: 0xffffff, life: 0.55, n: 2 }); V0.beam('energy', muzzle.clone(), end.clone(), { width: 0.14, color: 0xbff4ff, core: 0xffffff, life: 0.3, n: 2 });
+      // a helix of energy wrapped round the slug's path, then ionised air drifting away
+      const u = _a.set(-r.d.z, 0, r.d.x).normalize(), v = _b.crossVectors(u, r.d).normalize();
+      for (let k = 0, N = Math.min(140, L * 2); k < N; k++) { const f = k / N, an = f * L * 2.2, q = _c.lerpVectors(muzzle, end, f).addScaledVector(u, Math.cos(an) * 0.22).addScaledVector(v, Math.sin(an) * 0.22); V0.emit('glow', q, { n: 1, speed: 0.4, life: 0.5 + f * 0.4, size: 0.22, color: 0x7fd8ff }); if (k % 3 === 0) V0.emit('steam', q, { n: 1, speed: 0.3, life: 1.4, size: 0.35, grav: -0.6 }); }
+      V0.emit('electric', end, { n: 26, speed: 10, life: 0.35, size: 0.5, color: 0xbff4ff }); V0.shock(end, { radius: 2.2, color: 0x6fd0ff, life: 0.3 }); V0.emit('glow', muzzle, { n: 6, speed: 2, life: 0.2, size: 0.7, color: 0x9fe8ff });
+      G.fx.flash(end, 0x6fd0ff, 80, 0.2); p.vel.addScaledVector(r.d, -6);
     } else if (w.kind === 'rocket' || w.kind === 'grenade') {
       const r = this.aimRay(w), tgt = this.trace(r.o, r.d, 400).p, dir = _c.subVectors(tgt, muzzle).normalize();
       if (w.kind === 'grenade') dir.y += 0.12;
-      const m = new THREE.Mesh(w.kind === 'rocket' ? this.rocketGeo : this.nadeGeo, gunMat3); m.position.copy(muzzle); m.castShadow = true; G.scene.add(m);
-      this.projectiles.push({ w, m, vel: dir.normalize().multiplyScalar(w.speed).add(w.kind === 'grenade' ? p.vel.clone().multiplyScalar(0.5) : V()), life: w.kind === 'rocket' ? 6 : 2.2, bounces: 0 });
-      if (w.kind === 'rocket') G.fx.burst(muzzle, 0xbbbbbb, 20, 3, 1.2, 2.2, -1, 0.3, _c.copy(dir).multiplyScalar(-12));
+      const m = w.kind === 'rocket' ? this.rocketMesh() : new THREE.Mesh(this.nadeGeo, gunMat3); m.position.copy(muzzle); m.castShadow = true; G.scene.add(m); m.lookAt(_a.copy(muzzle).add(dir));
+      // rockets leave the tube slowly and the motor kicks in a moment later, like the real thing
+      const rk = w.kind === 'rocket';
+      this.projectiles.push({ w, m, vel: dir.normalize().clone().multiplyScalar(rk ? w.speed * 0.35 : w.speed).add(rk ? V() : p.vel.clone().multiplyScalar(0.5)), life: rk ? 6 : 2.2, bounces: 0, age: 0, prev: muzzle.clone() });
+      if (rk) this.backblast(muzzle, dir); else G.vfx.emit('smoke', muzzle, { n: 4, speed: 1, life: 0.8, size: 0.35, dir: _a.copy(dir).multiplyScalar(2) });
     } else if (w.kind === 'swarm') {
       const r = this.aimRay(w, 0), targets = [];
       for (const c of G.ents.cars) if (!c.dead && c !== p.car) targets.push(c); for (const n of G.ents.npcs) if (!n.dead && n.kind !== 'ped') targets.push(n); if (G.wanted.heli && !G.wanted.heli.down) targets.push(G.wanted.heli);
       const locked = targets.map(t => { _c.subVectors(t.pos, r.o); const l = _c.length(); return [l < 260 && _c.dot(r.d) / l > 0.82 ? l : 1e9, t]; }).filter(a => a[0] < 1e9).sort((a, b) => a[0] - b[0]).map(a => a[1]);
       for (let i = 0; i < 4; i++) {
-        const m = new THREE.Mesh(this.rocketGeo, gunMat); m.scale.setScalar(0.7); m.position.copy(muzzle); G.scene.add(m);
+        const m = this.rocketMesh(true); m.position.copy(muzzle); G.scene.add(m);
         const spread = _c.set((Math.random() - 0.5) * 0.8, 0.5 + Math.random() * 0.4, (Math.random() - 0.5) * 0.8);
-        this.projectiles.push({ w, m, vel: r.d.clone().multiplyScalar(w.speed * 0.5).add(spread.multiplyScalar(12)), life: 6, homing: locked.length ? locked[i % locked.length] : null, delay: i * 0.08 });
+        this.projectiles.push({ w, m, vel: r.d.clone().multiplyScalar(w.speed * 0.5).add(spread.multiplyScalar(12)), life: 6, homing: locked.length ? locked[i % locked.length] : null, delay: i * 0.08, age: 0.3, prev: muzzle.clone() });
       }
       G.ui.toast(locked.length ? `Locked ${Math.min(4, locked.length)} target${locked.length > 1 ? 's' : ''}` : 'No lock: firing straight');
     } else if (w.kind === 'flame') {
       const r = this.aimRay(w), d = r.d;
-      for (let k = 0; k < 3; k++) G.fx.burst(muzzle, Math.random() < 0.5 ? 0xff8a20 : 0xffc040, 1, 3, 0.55, 2.4, -3, 0.1, _c.copy(d).multiplyScalar(22 + Math.random() * 6).add(p.vel));
+      // a cone of burning fuel: hot, fast and small at the nozzle, big, slow and sooty at the end of its reach
+      G.vfx.emit('fire', muzzle, { n: 3, speed: 1.6, life: 0.6, size: 0.45, grow: 5, drag: 2.2, grav: -3, dir: _c.copy(d).multiplyScalar(24 + Math.random() * 6).add(p.vel), spread: 0.08 });
+      G.vfx.emit('glow', muzzle, { n: 1, speed: 0.2, life: 0.08, size: 0.5, color: 0x8ab8ff });
+      if (Math.random() < 0.5) G.vfx.emit('smoke', _a.copy(muzzle).addScaledVector(d, 9), { n: 1, speed: 1, life: 1.6, size: 1.2, dir: _b.copy(d).multiplyScalar(5), grav: -2.5 });
+      if (Math.random() < 0.4) G.vfx.emit('ember', _a.copy(muzzle).addScaledVector(d, 4), { n: 2, speed: 3, life: 0.9, size: 0.12, dir: _b.copy(d).multiplyScalar(10) });
+      if (Math.random() < 0.15) { const h = this.trace(r.o, d, w.range + 4); if (h.type === 'world') G.vfx.emit('fire', h.p, { n: 3, speed: 1, life: 1.2, size: 0.9, grav: -4 }); }
       const tip = _c.copy(muzzle);
       G.ents.inRange(muzzle, w.range, n => { _a.subVectors(n.pos, muzzle).setY(0); const l = _a.length() || 1; if (_a.dot(_b.set(d.x, 0, d.z).normalize()) / l > 0.85) { n.hit(w.dmg / w.rate, null, 0, 'player'); n.burning = Math.max(n.burning, 4); } });
       G.ents.carsIn(muzzle, w.range, c => { if (c === p.car) return; _a.subVectors(c.pos, muzzle).setY(0); const l = _a.length() || 1; if (_a.dot(_b.set(d.x, 0, d.z).normalize()) / l > 0.85) { c.damage(w.dmg / w.rate * 0.8); c.onFire = 3; } });
       G.props.blast(tip.addScaledVector(d, 6), 4, 1);
     } else if (w.kind === 'arc') {
       const r = this.aimRay(w), first = this.trace(r.o, r.d, w.range); let from = muzzle.clone(), cur = first.type === 'npc' || first.type === 'car' ? first.ent : null, hit = new Set(), pts = [];
-      if (!cur) { this.bolt(from, first.p); G.fx.burst(first.p, 0xbfe8ff, 20, 6, 0.4, 0.8); }
+      if (!cur) { this.bolt(from, first.p); G.vfx.emit('electric', first.p, { n: 18, speed: 7, life: 0.3, size: 0.4 }); }
       for (let k = 0; k < w.chain && cur; k++) {
-        hit.add(cur); const to = cur.pos.clone().setY(cur.pos.y + 1.1); this.bolt(from, to); G.fx.burst(to, 0xbfe8ff, 16, 5, 0.4, 0.8);
+        hit.add(cur); const to = cur.pos.clone().setY(cur.pos.y + 1.1); this.bolt(from, to); G.vfx.emit('electric', to, { n: 16, speed: 6, life: 0.35, size: 0.4 }); G.vfx.emit('glow', to, { n: 3, speed: 0.5, life: 0.25, size: 1.4, color: 0x7fc8ff });
         if (cur.hit) { cur.hit(w.dmg, _a.subVectors(to, from).normalize(), 3, 'player'); cur.stunT = 1.2; if (cur.state !== 'down') { cur.state = 'stagger'; cur.t = 0.8; } this.marker(cur); } else { cur.damage(w.dmg * 0.6, to.x, to.z); cur.emp = Math.max(cur.emp, 3); }
         from = to; let next = null, bd = 18 * 18; for (const n of G.ents.npcs) { if (n.dead || hit.has(n)) continue; const dd = n.pos.distanceToSquared(to); if (dd < bd) { bd = dd; next = n; } } cur = next;
       }
       G.fx.flash(muzzle, 0x9fd8ff, 60, 0.12);
     }
   }
+  // forked lightning: a jittering main bolt that re-strikes, plus a couple of short branches
   bolt(a, b) {
-    const n = 7, pts = [a.clone()]; for (let i = 1; i < n; i++) pts.push(new THREE.Vector3().lerpVectors(a, b, i / n).add(_c.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(a.distanceTo(b) * 0.06))); pts.push(b.clone());
-    for (let i = 0; i < pts.length - 1; i++) { G.fx.line(pts[i], pts[i + 1], 0xbfe8ff, 0.05, 0.18); G.fx.line(pts[i].clone(), pts[i + 1].clone(), 0xffffff, 0.015, 0.12); }
+    const L = a.distanceTo(b); a = a.clone(); b = b.clone();
+    G.vfx.beam('energy', a, b, { n: 14, jitter: L * 0.09, width: 0.22, color: 0x5ab8ff, core: 0xffffff, life: 0.22 });
+    G.vfx.beam('energy', a, b, { n: 10, jitter: L * 0.05, width: 0.06, color: 0xdff6ff, core: 0xffffff, life: 0.16 });
+    for (let k = 0; k < 2; k++) { const s = _c.lerpVectors(a, b, 0.3 + Math.random() * 0.4).clone(), e = s.clone().add(_a.set(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).multiplyScalar(L * 0.35)); G.vfx.beam('energy', s, e, { n: 6, jitter: L * 0.04, width: 0.07, color: 0x7fc8ff, core: 0xdff6ff, life: 0.12 }); }
+  }
+  rocketMesh(small) {
+    if (!this.rocketParts) {
+      const body = new THREE.CylinderGeometry(0.055, 0.055, 0.5, 12).rotateX(Math.PI / 2), nose = new THREE.ConeGeometry(0.055, 0.2, 12).rotateX(Math.PI / 2).translate(0, 0, 0.35), fin = new THREE.BoxGeometry(0.006, 0.16, 0.12).translate(0, 0.09, -0.2);
+      const flame = new THREE.ConeGeometry(0.06, 0.6, 10, 1, true).rotateX(-Math.PI / 2).translate(0, 0, -0.55);
+      this.rocketParts = { body, nose, fin, flame, red: new THREE.MeshStandardMaterial({ color: 0x8a1a12, roughness: 0.5, metalness: 0.3 }), fmat: new THREE.MeshBasicMaterial({ color: 0xffc060, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }) };
+    }
+    const R = this.rocketParts, g = new THREE.Group();
+    const b = new THREE.Mesh(R.body, gunMat3), n = new THREE.Mesh(R.nose, small ? gunMat : R.red); b.castShadow = true; g.add(b, n);
+    for (let i = 0; i < 4; i++) { const f = new THREE.Mesh(R.fin, gunMat); f.rotation.z = i * Math.PI / 2 + Math.PI / 4; g.add(f); }
+    const fl = new THREE.Mesh(R.flame, R.fmat); fl.visible = false; g.add(fl); g.userData.flame = fl;
+    if (small) g.scale.setScalar(0.7); return g;
+  }
+  // the launch: blast out of the back of the tube, a puff at the front
+  backblast(muzzle, dir) {
+    const tail = _a.copy(muzzle).addScaledVector(dir, -1.25);
+    G.vfx.emit('fire', tail, { n: 10, speed: 2, life: 0.25, size: 0.7, dir: _b.copy(dir).multiplyScalar(-14) });
+    G.vfx.emit('smoke', tail, { n: 14, speed: 2.5, life: 2.4, size: 0.9, dir: _b.copy(dir).multiplyScalar(-9), grav: -0.8 });
+    G.vfx.emit('smoke', muzzle, { n: 6, speed: 1.2, life: 1.6, size: 0.5, dir: _b.copy(dir).multiplyScalar(3) });
+    G.vfx.emit('glow', muzzle, { n: 3, speed: 0.5, life: 0.12, size: 1.2, color: 0xffb060 });
+    G.fx.flash(tail, 0xffa050, 60, 0.15);
   }
   // what a bullet does when it lands
   impact(w, h, d, muzzle, tracer) {
     this.lastImpact = h.type + ':' + h.t.toFixed(1);
-    if (tracer || Math.random() < 0.3) G.fx.line(muzzle.clone(), h.p.clone(), w.id === 'sniper' ? 0xfff4d0 : 0xffd890, w.id === 'sniper' ? 0.05 : 0.025, w.id === 'sniper' ? 0.25 : 0.06);
+    if (tracer || Math.random() < 0.3) { if (w.id === 'sniper') { G.vfx.beam('energy', muzzle.clone(), h.p.clone(), { width: 0.05, color: 0xfff0c0, core: 0xffffff, life: 0.3 }); G.vfx.emit('steam', _c.lerpVectors(muzzle, h.p, 0.3), { n: 3, speed: 0.3, life: 1.2, size: 0.3 }); } else G.vfx.tracer(muzzle, h.p, 0xffc870, 0.045); }
     const dmg = w.dmg;
     if (h.type === 'npc') {
       const n = h.ent, head = h.p.y > n.pos.y + 1.52 * n.rig.root.scale.x, k = head ? 2.4 : 1;
@@ -207,12 +262,12 @@ export class Weapons {
       this.marker(n, head);
     } else if (h.type === 'car') {
       const c = h.ent; c.damage(dmg * 0.45, h.p.x, h.p.z); c.vel.addScaledVector(d, (w.knock || 1) * 0.6 * 1400 / c.spec.mass); if (c.ai === 'traffic' || c.ai === 'road') { c.ai = 'none'; c.touched = true; c.vel.set(Math.sin(c.yaw) * c.vf, 0, Math.cos(c.yaw) * c.vf); }
-      G.fx.burst(h.p, 0xffe0a0, 6, 5, 0.25, 0.5, 10, 0.05); G.audio.ping && G.audio.ping(h.p); if (c.police) G.wanted.crime(0.25); G.ui.hitmarker(false, false);
+      G.vfx.emit('spark', h.p, { n: 8, speed: 7, life: 0.3, size: 0.07 }); G.audio.ping && G.audio.ping(h.p); if (c.police) G.wanted.crime(0.25); G.ui.hitmarker(false, false);
     } else if (h.type === 'heli') { G.wanted.hitHeli(dmg * 0.35); G.fx.burst(h.p, 0xffe0a0, 8, 6, 0.3, 0.6, 10); G.ui.hitmarker(false, false); }
     else if (h.type === 'prop') { const q = h.ent; if (q.m < dmg * 4) G.props.knock(q, _c.copy(d).multiplyScalar(dmg * 0.12), h.p); G.fx.burst(h.p, 0xffe0a0, 5, 4, 0.2, 0.5, 10, 0.05); }
     else if (h.type === 'water') G.fx.burst(h.p, 0xdff0ff, 10, 3, 0.6, 0.9, 12, 0.2, _c.set(0, 5, 0));
     else if (h.type === 'world') {
-      G.fx.burst(h.p, 0xcfc4b0, 6, 3, 0.5, 0.7, 10, 0.05); G.fx.burst(h.p, 0xffd890, 3, 4, 0.12, 0.4, 0, 0.05);
+      const nn = _b.set(h.n.x, h.n.y, h.n.z); G.vfx.emit('dust', h.p, { n: 2, speed: 1.5, life: 0.9, size: 0.35, dir: _c.copy(nn).multiplyScalar(1.5) }); G.vfx.emit('spark', h.p, { n: 4, speed: 5, life: 0.25, size: 0.06, dir: _c.copy(nn).multiplyScalar(3) });
       // bullet hole
       const i = this.decalI = (this.decalI + 1) % 300; const nrm = _a.set(h.n.x, h.n.y, h.n.z); if (nrm.lengthSq() < 0.5) nrm.set(0, 1, 0);
       const m = new THREE.Matrix4().lookAt(_b.set(0, 0, 0), nrm, Math.abs(nrm.y) > 0.9 ? _c.set(1, 0, 0) : _c.set(0, 1, 0)); m.setPosition(_d.copy(h.p).addScaledVector(nrm, 0.02));
@@ -231,9 +286,15 @@ export class Weapons {
       const P = this.projectiles[i], m = P.m; P.life -= dt;
       if (P.delay > 0) { P.delay -= dt; m.position.copy(this.muzzlePos(_a)); continue; }
       if (P.homing && P.homing.pos) { const t = P.homing, tp = _a.copy(t.pos).setY(t.pos.y + 1); const want = tp.sub(m.position).normalize().multiplyScalar(P.w.speed); P.vel.lerp(want, 1 - Math.exp(-3.5 * dt)); if (t.dead || t.down) P.homing = null; }
-      if (P.w.kind === 'grenade') P.vel.y -= 18 * dt; else if (!P.homing) P.vel.y -= 1.5 * dt;
+      P.age = (P.age || 0) + dt; const rk = P.w.kind !== 'grenade';
+      if (!rk) P.vel.y -= 18 * dt;
+      else if (P.age > 0.12) { // motor burning: accelerate to full speed along the flight line
+        const sp = P.vel.length(); if (sp < P.w.speed) P.vel.multiplyScalar(Math.min(P.w.speed, sp + 160 * dt) / sp); }
       const step = P.vel.length() * dt, dir = _b.copy(P.vel).normalize();
-      const h = this.trace(m.position, dir, step + 0.3);
+      let h = this.trace(m.position, dir, step + 0.3);
+      // never let a fast projectile tunnel through the ground between frames
+      const gy = G.world.groundAt(m.position.x + dir.x * step, m.position.z + dir.z * step);
+      if (h.type === 'none' && m.position.y + dir.y * step < gy + 0.08) h = { type: 'world', t: step, n: { x: 0, y: 1, z: 0 }, p: new THREE.Vector3().copy(m.position).addScaledVector(dir, step).setY(gy + 0.08) };
       if (h.type !== 'none' || P.life <= 0) {
         if (P.w.kind === 'grenade' && h.type === 'world' && P.life > 0 && P.bounces < 4) {
           // bounce off walls and ground, losing energy
@@ -242,7 +303,16 @@ export class Weapons {
         m.position.copy(h.p); this.explode(m.position.clone(), P.w); G.scene.remove(m); this.projectiles.splice(i, 1); continue;
       }
       m.position.addScaledVector(dir, step); m.lookAt(_c.copy(m.position).add(dir));
-      if (P.w.kind !== 'grenade') { G.fx.burst(m.position, 0xffb050, 2, 1, 0.15, 1.2, 0, 0.05); G.fx.burst(m.position, 0x999999, 2, 0.8, 1.4, 1.8, -1.5, 0.2); }
+      if (rk && P.age > 0.12) {
+        // exhaust: flickering flame cone, hot particles and a thick smoke trail laid evenly along the path
+        const fl = m.userData.flame; if (fl) { fl.visible = true; fl.scale.set(1, 1, 0.8 + Math.random() * 0.6); }
+        const tail = _c.copy(m.position).addScaledVector(dir, -0.4 * m.scale.x), seg = P.prev.distanceTo(tail), k = Math.max(1, Math.min(8, Math.round(seg / 0.6)));
+        for (let j = 0; j < k; j++) { const q = _a.lerpVectors(P.prev, tail, (j + Math.random()) / k); G.vfx.emit('smoke', q, { n: 1, speed: 0.5, life: 2.6 + Math.random(), size: 0.45 * m.scale.x, grow: 4.5, grav: -0.5, drag: 1.5 }); }
+        G.vfx.emit('fire', tail, { n: 2, speed: 0.6, life: 0.14, size: 0.5 * m.scale.x, grow: 0.5, dir: _a.copy(dir).multiplyScalar(-8) });
+        G.vfx.emit('glow', tail, { n: 1, speed: 0, life: 0.05, size: 1.1 * m.scale.x, color: 0xffb060 });
+        P.prev.copy(tail);
+      } else if (rk) { P.prev.copy(m.position); G.vfx.emit('smoke', m.position, { n: 1, speed: 0.4, life: 1, size: 0.25 }); }
+      else if (Math.random() < 0.5) G.vfx.emit('smoke', m.position, { n: 1, speed: 0.2, life: 0.6, size: 0.12, grow: 2 });
     }
   }
 }

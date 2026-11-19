@@ -156,7 +156,7 @@ export class Props {
       const d = Math.max(Math.abs(ch.cx - this.center.x), Math.abs(ch.cz - this.center.z)); if (d > R) continue;
       const types = this.types(ch.regKey);
       for (const p of ch.props) {
-        if (!p.alive) continue;
+        if (!p.alive) continue; if (ch.hgt && !p.snapped) { p.y = G.world.groundAt(p.x, p.z); p.snapped = true; }
         if (p.t === 20) {
           const tr = this.trees[p.sp]; if (d <= 1) { add('ts' + p.sp, tr.solid, this.treeMat, p, p.s, true); add('tc' + p.sp, tr.cards, tr.palm ? this.frondMat : this.leafMat, p, p.s, true); } else add('tf' + p.sp, tr.far, this.treeMat, p, p.s, false);
           continue;
@@ -287,7 +287,7 @@ export class Props {
         for (let it = 0; it < 5; it++) {
           for (const [i, j, L] of b.cons) { const A = b.pts[i].p, B = b.pts[j].p, d = _a.subVectors(B, A), l = d.length() || 1e-6, k = (l - L) / l * 0.5; A.addScaledVector(d, k); B.addScaledVector(d, -k); }
           for (const pt of b.pts) {
-            const gy = Geo.height(pt.p.x, pt.p.z) + 0.05;
+            const gy = G.world.groundAt(pt.p.x, pt.p.z) + 0.05;
             if (pt.p.y < gy) { pt.p.y = gy; const fr = 0.55; pt.o.x = pt.p.x - (pt.p.x - pt.o.x) * fr; pt.o.z = pt.p.z - (pt.p.z - pt.o.z) * fr; if (pt.o.y < pt.p.y) pt.o.y = pt.p.y + (pt.p.y - pt.o.y) * 0.25; }
             G.world.forBoxes(pt.p.x - 0.1, pt.p.z - 0.1, pt.p.x + 0.1, pt.p.z + 0.1, s2 => { if (pt.p.y > s2.maxy || pt.p.y < s2.miny || !insideSolid(s2, pt.p.x, pt.p.z)) return; if (pt.p.y > s2.maxy - 0.6) { pt.p.y = s2.maxy; return; } nearestWall(s2, pt.p.x, pt.p.z, _n); pt.p.x = _n.x; pt.p.z = _n.z; });
           }

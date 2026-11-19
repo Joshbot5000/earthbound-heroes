@@ -108,7 +108,7 @@ export const Geo = {
   height(x, z) {
     if (City.active) {
       const c = City.active, pad = 600, out = Math.max(c.x0 - x, x - c.x1, c.z0 - z, z - c.z1);
-      const ch = (x, z) => { const l = City.landAt(x, z); return l > 0.999 ? BASE : -3.2 + (BASE + 3.2) * smooth(0.3, 0.7, l); };
+      const ch = (x, z) => { const l = City.landAt(x, z); if (l > 0.999 || (l > 0.05 && City.onRoad(x, z))) return BASE; return -3.2 + (BASE + 3.2) * smooth(0.3, 0.7, l); };
       if (out < 0) return ch(x, z);
       if (out < pad) { const k = smooth(0, pad, out), hb = ch(clamp(x, c.x0, c.x1 - 0.01), clamp(z, c.z0, c.z1 - 0.01)); return hb * (1 - k) + this.rawHeight(x, z) * k; }
     }

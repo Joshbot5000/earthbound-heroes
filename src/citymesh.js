@@ -116,10 +116,10 @@ export function streetMeshes(cx, cz, M) {
   const road = { p: [], uv: [], r: [], i: [] }, pave = { p: [], uv: [], r: [], i: [] }, br = new BridgeBuilder();
   for (const e of list) {
     const cls = R.cls[e], w = ROAD_W[cls]; if (!w || (R.flags[e] & 2)) continue;
-    const drive = DRIVABLE(cls), bridge = R.flags[e] & 1, y = BASE + (drive ? 0.06 + (9 - cls) * 0.002 : 0.035);
+    const drive = DRIVABLE(cls), bridge = R.flags[e] & 1, y = BASE + (drive ? 0.014 : 0.01);
     if (drive) {
       ribbon(road, R.v, R.ps[e], R.ps[e + 1], w, y, [cls, 0, w, bridge]);
-      if (cls !== 1) ribbon(pave, R.v, R.ps[e], R.ps[e + 1], w + 6.4, BASE + 0.03, [cls, 0, w + 6.4, 0]);
+      if (cls !== 1) ribbon(pave, R.v, R.ps[e], R.ps[e + 1], w + 6.4, BASE + 0.008, [cls, 0, w + 6.4, 0]);
     } else ribbon(pave, R.v, R.ps[e], R.ps[e + 1], w, y, [cls, 0, w, 0]);
     if (bridge) br.add(R.v, R.ps[e], R.ps[e + 1], drive ? w + 10 : w + 1.5);
   }
@@ -143,7 +143,7 @@ class BridgeBuilder {
         this.quad([ax, par, az], [bx, par, bz], [bx + ix, par, bz + iz], [ax + ix, par, az + iz]);  // coping
       }
       this.quad([x0 - nx, bot, z0 - nz], [x0 + nx, bot, z0 + nz], [x1 + nx, bot, z1 + nz], [x1 - nx, bot, z1 - nz]);   // soffit
-      this.quad([x1 - nx, BASE + 0.015, z1 - nz], [x1 + nx, BASE + 0.015, z1 + nz], [x0 + nx, BASE + 0.015, z0 + nz], [x0 - nx, BASE + 0.015, z0 - nz]);   // deck
+      this.quad([x1 - nx, BASE - 0.01, z1 - nz], [x1 + nx, BASE - 0.01, z1 + nz], [x0 + nx, BASE - 0.01, z0 + nz], [x0 - nx, BASE - 0.01, z0 - nz]);   // deck
     }
   }
   geometry() {

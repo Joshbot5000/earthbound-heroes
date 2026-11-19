@@ -103,6 +103,17 @@ export const City = {
       if (DRIVABLE(R.cls[e]) && !(R.flags[e] & 2) && L > 0.5) { adj[R.na[e]].push(e); adj[R.nb[e]].push(e); }
     }
     R.adj = adj;
+    // a raster (same 4 m grid as the land mask) of where streets and pavements are: kept level ground
+    const rm = new Uint8Array(c.mw * c.mh), mr = c.mr, ox = c.w / 2, oz = c.h / 2;
+    for (let e = 0; e < R.E; e++) {
+      const w = ROAD_W[R.cls[e]]; if (!w || (R.flags[e] & 3)) continue; const rad = (DRIVABLE(R.cls[e]) ? w / 2 + 3.2 : w / 2) + 1, cr = Math.ceil(rad / mr);
+      for (let k = R.ps[e]; k < R.ps[e + 1] - 1; k++) {
+        const ax = R.local[k * 2], az = R.local[k * 2 + 1], bx = R.local[k * 2 + 2], bz = R.local[k * 2 + 3], L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 2));
+        for (let t = 0; t <= n; t++) { const x = ax + (bx - ax) * t / n, z = az + (bz - az) * t / n, ci = Math.floor((x + ox) / mr), cj = Math.floor((z + oz) / mr);
+          for (let j = -cr; j <= cr; j++) for (let i = -cr; i <= cr; i++) { const ii = ci + i, jj = cj + j; if (ii < 0 || jj < 0 || ii >= c.mw || jj >= c.mh) continue; if ((i * mr) ** 2 + (j * mr) ** 2 <= rad * rad) rm[jj * c.mw + ii] = 1; } }
+      }
+    }
+    c.roadMask = rm;
   },
   // place the city in the game frame (call after Geo.setOrigin)
   attach(c) {
@@ -140,6 +151,7 @@ export const City = {
     return c.mask[j * c.mw + i];
   },
   // 0..1 how much is land here (bilinear, so banks slope)
+  onRoad(x, z) { const c = this.active; if (!c || !c.roadMask) return false; const i = Math.floor((x - c.x0) / c.mr), j = Math.floor((z - c.z0) / c.mr); return i >= 0 && j >= 0 && i < c.mw && j < c.mh && c.roadMask[j * c.mw + i] === 1; },
   landAt(x, z) {
     const c = this.active, fx = (x - c.x0) / c.mr - 0.5, fz = (z - c.z0) / c.mr - 0.5, i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j;
     const L = (a, b) => (a < 0 || b < 0 || a >= c.mw || b >= c.mh) ? 1 : (c.mask[b * c.mw + a] ? 1 : 0);

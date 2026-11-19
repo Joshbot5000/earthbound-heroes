@@ -287,10 +287,11 @@ export class World {
     return { style, tex, col, roof, shop: cls === 3 || (h < 30 && h > 7 && r2 < (c.region === 'india' ? 0.55 : 0.3) && cls !== 1 && cls !== 5) };
   }
   buildGround(ch) {
-    const real = ch.real, N = real ? 24 : this.q.groundSeg, g = new THREE.PlaneGeometry(CH, CH, N, N); g.rotateX(-Math.PI / 2);
+    const real = ch.real, N = real ? 32 : this.q.groundSeg * 2, g = new THREE.PlaneGeometry(CH, CH, N, N); g.rotateX(-Math.PI / 2);
     const p = g.attributes.position, uv = g.attributes.uv, col = new Float32Array(p.count * 3), c = [0, 0, 0];
+    ch.hN = N; ch.hgt = new Float32Array(p.count);   // kept so physics stands on exactly the surface that is drawn
     for (let i = 0; i < p.count; i++) {
-      const lx = p.getX(i) + CH / 2, lz = p.getZ(i) + CH / 2, x = ch.x0 + lx, z = ch.z0 + lz, h = Geo.height(x, z);
+      const lx = p.getX(i) + CH / 2, lz = p.getZ(i) + CH / 2, x = ch.x0 + lx, z = ch.z0 + lz, h = Geo.height(x, z); ch.hgt[i] = h;
       p.setXYZ(i, lx, h, lz); uv.setXY(i, lx / BLOCK, -lz / BLOCK);
       if (!ch.urban) { const s = Math.abs(Geo.height(x + 6, z) - h) / 6 + Math.abs(Geo.height(x, z + 6) - h) / 6; this.groundColor(x, z, h, s, c); col.set(c, i * 3); }
     }
@@ -301,8 +302,18 @@ export class World {
     ch.ground = m; this.scene.add(m);
     if (real) for (const s of streetMeshes(ch.cx, ch.cz, this.cityMats)) { ch.extra.push(s); this.scene.add(s); }
   }
+  // height of the drawn ground (same triangles as the mesh); exact terrain where no mesh is loaded
+  groundAt(x, z) {
+    const ch = this.chunks.get(key(Math.floor(x / CH), Math.floor(z / CH)));
+    if (!ch || !ch.hgt) return Geo.height(x, z);
+    const N = ch.hN, s = CH / N, fx = (x - ch.x0) / s, fz = (z - ch.z0) / s; let ix = Math.floor(fx), iz = Math.floor(fz);
+    if (ix > N - 1) ix = N - 1; if (iz > N - 1) iz = N - 1; if (ix < 0) ix = 0; if (iz < 0) iz = 0;
+    const tx = fx - ix, tz = fz - iz, w = N + 1, H = ch.hgt, a = H[iz * w + ix], b = H[(iz + 1) * w + ix], d = H[iz * w + ix + 1];
+    if (tx + tz <= 1) return a + (d - a) * tx + (b - a) * tz;
+    const c = H[(iz + 1) * w + ix + 1]; return c + (b - c) * (1 - tx) + (d - c) * (1 - tz);
+  }
   dropGround(ch) {
-    if (ch.ground) { this.scene.remove(ch.ground); ch.ground.geometry.dispose(); ch.ground = null; }
+    if (ch.ground) { this.scene.remove(ch.ground); ch.ground.geometry.dispose(); ch.ground = null; ch.hgt = null; }
     for (const m of ch.extra) { this.scene.remove(m); m.geometry.dispose(); } ch.extra.length = 0;
   }
   dropBuildings(ch) { if (ch.bmesh) { this.scene.remove(ch.bmesh); ch.bmesh.geometry.dispose(); ch.bmesh = null; } if (ch.orbMesh) { this.scene.remove(ch.orbMesh); ch.orbMesh = null; } for (const L of ch.marks) if (L.group) this.scene.remove(L.group); }
@@ -396,7 +407,7 @@ export class World {
       out.wall = { x: ox, z: oz, box: b };
     });
     if (G.props && !noProps) G.props.collide(p, r, h, v, out);
-    const g = Geo.height(p.x, p.z);
+    const g = this.groundAt(p.x, p.z);
     if (p.y <= g) { p.y = g; if (v.y < 0) v.y = 0; out.grounded = true; }
     out.ground = g; return out;
   }
@@ -417,13 +428,15 @@ export class World {
       }
       if (ax >= 0 && t0 < best) { best = t0; nx = ax === 0 ? sg : 0; ny = ax === 1 ? sg : 0; nz = ax === 2 ? sg : 0; box = b; }
     });
-    let t = 0, step = 3, prev = 0;
-    while (t < best) {
-      if (o.y + d.y * t < Geo.height(o.x + d.x * t, o.z + d.z * t)) {
-        let a = prev, b2 = t; for (let i = 0; i < 6; i++) { const m = (a + b2) / 2; if (o.y + d.y * m < Geo.height(o.x + d.x * m, o.z + d.z * m)) b2 = m; else a = m; }
+    // march the terrain; always test the end of the ray too, so short rays (bullets, rockets per frame) hit the ground
+    let t = 0, step = Math.min(3, best), prev = 0;
+    for (;;) {
+      if (o.y + d.y * t < this.groundAt(o.x + d.x * t, o.z + d.z * t)) {
+        let a = prev, b2 = t; for (let i = 0; i < 8; i++) { const m = (a + b2) / 2; if (o.y + d.y * m < this.groundAt(o.x + d.x * m, o.z + d.z * m)) b2 = m; else a = m; }
         best = b2; nx = 0; ny = 1; nz = 0; box = null; break;
       }
-      prev = t; t += step; step = Math.min(step * 1.15, 14);
+      if (t >= best) break;
+      prev = t; t = Math.min(best, t + step); step = Math.min(step * 1.15, 14);
     }
     hit.hit = best < max; hit.t = best; hit.x = o.x + d.x * best; hit.y = o.y + d.y * best; hit.z = o.z + d.z * best; hit.nx = nx; hit.ny = ny; hit.nz = nz; hit.box = box;
     return hit;

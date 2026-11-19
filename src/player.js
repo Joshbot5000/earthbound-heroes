@@ -5,6 +5,7 @@ import { G, clamp, lerp, damp, angDiff } from './util.js';
 import { Geo } from './geo.js';
 import { makeRig, animateRig, setRigOpacity } from './rig.js';
 import { nearestWall } from './solid.js';
+import { Beam } from './vfx.js';
 
 const V = () => new THREE.Vector3(), _a = V(), _b = V(), _c = V(), _d = V(), out = {}, hit = {}, _w = {};
 const GRAV = 26;
@@ -15,19 +16,21 @@ export class Player {
     this.grounded = true; this.jumps = 0; this.coyote = 0; this.hp = 100; this.energy = 100; this.iframes = 0; this.invisible = false; this.dead = false;
     this.swing = null; this.zip = null; this.wall = null; this.wallT = 0; this.climbed = false; this.attackT = 0; this.combo = 0; this.comboT = 0; this.pending = null;
     this.dodgeT = 0; this.hurtT = 9; this.lookIdle = 0; this.fov = 62; this.anim = {}; this.punch = 0; this.side = 1; this.override = null; this.camT = V(); this.speed = 0; this.swims = false;
-    this.heroes = heroes; this.rigs = heroes.map(h => { const r = makeRig(h.look); r.root.visible = false; G.scene.add(r.root); return r; });
-    this.rope = new THREE.Mesh(G.fx.rope, new THREE.MeshBasicMaterial({ color: 0xffffff })); this.rope.visible = false; this.rope.frustumCulled = false; G.scene.add(this.rope);
+    this.heroes = heroes; this.rigs = heroes.map(h => { const r = makeRig(h.look); r.root.rotation.order = 'YXZ'; r.root.visible = false; G.scene.add(r.root); return r; });
+    // the web line: a thin bright strand with a softer halo, drawn as a camera-facing ribbon so it stays crisp at any distance
+    this.rope = { visible: false }; this.web = new Beam(G.scene, 'web', 16, 0.05, 0xcfd8d8, 0xffffff); this.web.visible = false; this.webHalo = new Beam(G.scene, 'web', 16, 0.16, 0x4a5050, 0x9aa4a4); this.webHalo.visible = false;
+    this.hand = 1; this.webShoot = 1; this.lean = new THREE.Vector2(); this.ropePts = Array.from({ length: 16 }, () => V());
     this.setHero(0);
   }
   setHero(i) {
     if (this.rig) this.rig.root.visible = false; this.heroIndex = i; this.hero = this.heroes[i]; this.rig = this.rigs[i]; this.rig.root.visible = this.mode === 'foot';
-    this.rope.material.color.set(this.hero.rope); this.endSwing(false); this.override = null; G.powers && G.powers.reset();
+    this.web.mat.uniforms.uCol.value.set(this.hero.rope).multiplyScalar(0.8); this.endSwing(false); this.override = null; G.powers && G.powers.reset();
   }
   get eye() { return _d.copy(this.pos).setY(this.pos.y + 1.5); }
   teleport(x, z, y) { this.pos.set(x, y ?? Math.max(Geo.height(x, z), 0) + 0.2, z); this.vel.set(0, 0, 0); this.endSwing(false); this.zip = null; if (this.car) this.exitCar(true); this.camT.copy(this.pos); }
   aim(max = 160) {                       // where the centre of the screen is pointing
     const c = G.camera; c.getWorldDirection(_a); G.world.raycast(c.position, _a, max + 8, hit);
-    return { point: new THREE.Vector3(hit.x, hit.y, hit.z), dir: _a.clone(), hit: hit.hit, ny: hit.ny, box: hit.box };
+    return { point: new THREE.Vector3(hit.x, hit.y, hit.z), dir: _a.clone(), hit: hit.hit, nx: hit.nx, ny: hit.ny, nz: hit.nz, box: hit.box };
   }
   damage(d, from) {
     if (this.iframes > 0 || this.dead) return; this.hp -= d * (this.hero.armor || 1); this.hurtT = 0; G.ui.hurt(); G.audio.hit(this.pos);
@@ -65,7 +68,11 @@ export class Player {
     const g = Math.max(0, Geo.height(this.pos.x, this.pos.z));
     this.swing = { anchor, len: Math.min(Math.max(10, this.pos.distanceTo(anchor)), anchor.y - g - 3), dir: dir.clone(), age: 0, sky: !!a[3] };
     if (this.vel.x * dir.x + this.vel.z * dir.z < 14) this.vel.addScaledVector(dir, 8);
-    this.rope.visible = true; G.audio.thwip(); if (!a[3]) G.fx.burst(anchor, this.hero.rope, 8, 3, 0.3, 1.2); return true;
+    // alternate hands each web, and fire the strand: it takes a moment to reach the anchor
+    this.hand = -this.hand; this.webShoot = 0; this.webFrom = null;
+    this.rope.visible = true; G.audio.thwip();
+    if (!a[3]) { const n = _c.set(this.pos.x - anchor.x, 0, this.pos.z - anchor.z).normalize(); const pt = anchor.clone(); G.vfx.timed(0.08, () => { }, () => { G.vfx.mark('web', pt, 1.4, 5, n.y > 0.7 ? null : n.clone()); G.vfx.emit('web', pt, { n: 3, speed: 2.5, life: 0.35, size: 0.45 }); G.vfx.emit('dust', pt, { n: 2, speed: 1, life: 0.8, size: 0.6 }); }); }
+    return true;
   }
   endSwing(boost) {
     if (!this.swing) return; const S = this.swing; this.swing = null; this.rope.visible = false; this.jumps = 1;
@@ -82,7 +89,7 @@ export class Player {
     const v = this.vel, sp = Math.hypot(v.x, v.z), dir = _c.copy(wish).setY(0).normalize();
     if (sp > 1) { const cur = _d.set(v.x / sp, 0, v.z / sp), nd = cur.lerp(dir, 0.8).normalize(), keep = clamp(sp * 0.94, 16, 42); v.x = nd.x * keep; v.z = nd.z * keep; }
     v.y = Math.max(v.y, 3); this.swing = null; this.rope.visible = false;
-    if (this.startSwing(dir)) { this.swing.age = 0; G.fx.ring(_c.copy(this.pos).setY(this.pos.y + 1), this.hero.rope, 2.5, 0.25); this.redirectT = 0.5; return true; }
+    if (this.startSwing(dir)) { this.swing.age = 0; G.vfx.emit('web', _c.copy(this.pos).setY(this.pos.y + 1.2), { n: 2, speed: 3, life: 0.3, size: 0.4 }); this.redirectT = 0.5; return true; }
     return false;
   }
   // ---------- cars ----------
@@ -109,7 +116,7 @@ export class Player {
   resolveHit() {
     const { tgt } = this.pending; this.pending = null; const f = _a.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)), last = this.combo === 2;
     let dmg = (last ? 42 : 24) * (this.hero.melee || 1); if (this.invisible) { dmg *= 3; G.powers.uncloak(); }
-    if (tgt && !tgt.dead && tgt.pos.distanceTo(this.pos) < 2.9) { tgt.hit(dmg, f, last ? 10 : 0, 'player'); G.audio.hit(this.pos, 1); G.shake = Math.max(G.shake, last ? 0.35 : 0.15); if (last) G.fx.ring(_c.copy(tgt.pos).setY(tgt.pos.y + 1), this.hero.rope, 3, 0.25); }
+    if (tgt && !tgt.dead && tgt.pos.distanceTo(this.pos) < 2.9) { tgt.hit(dmg, f, last ? 10 : 0, 'player'); G.audio.hit(this.pos, 1); G.shake = Math.max(G.shake, last ? 0.35 : 0.15); if (last) { G.vfx.shock(_c.copy(tgt.pos).setY(tgt.pos.y + 1), { radius: 3, color: this.hero.rope, life: 0.25 }); G.vfx.emit('glow', _c, { n: 12, speed: 6, life: 0.3, size: 0.12, color: this.hero.rope }); } }
     else if (G.props.punch(this.pos, _c.copy(f).multiplyScalar(1.4), last ? 14 : 8)) G.shake = Math.max(G.shake, 0.2);
     else for (const c of G.ents.cars) { _c.subVectors(c.pos, this.pos); if (_c.length() < 3.4 && _c.dot(f) > 0) { c.vel.addScaledVector(f, last ? 9 : 4); c.damage(last ? 22 : 12); if (c.ai === 'traffic') { c.ai = 'none'; c.touched = true; } G.audio.crash(c.pos, 8); G.wanted.crime(0.4); break; } }
   }
@@ -151,7 +158,7 @@ export class Player {
     if (this.zip) {
       const z = this.zip, d = _b.subVectors(z.to, p), l = d.length(); z.t += dt;
       if (l < 3 || z.t > 3) {
-        if (z.perch) { const f = _c.set(d.x, 0, d.z).normalize(); v.set(f.x * 17, 17, f.z * 17); G.fx.ring(_c.copy(p), this.hero.rope, 3, 0.3); G.audio.whoosh(); }   // point launch over the edge
+        if (z.perch) { const f = _c.set(d.x, 0, d.z).normalize(); v.set(f.x * 17, 17, f.z * 17); G.vfx.shock(_c.copy(p).setY(p.y + 0.8), { radius: 3, color: this.hero.rope, life: 0.3 }); G.audio.whoosh(); }   // point launch over the edge
         else { v.copy(d.normalize()).multiplyScalar(24); v.y = Math.max(v.y, 4) + 9; }
         this.zip = null; this.rope.visible = false; this.jumps = 1; }
       else { v.copy(d.multiplyScalar(1 / l)).multiplyScalar(Math.min(78, 30 + z.t * 160)); gravity = 0; this.yaw = Math.atan2(d.x, d.z); A.swing = true; }
@@ -165,7 +172,9 @@ export class Player {
       // speed gain through the bottom of the arc
       const low = clamp(-r.y, 0, 1), vs = v.length(); if (vs > 1 && vs < 44) v.multiplyScalar(1 + low * low * 0.3 * dt); if (vs > 48) v.multiplyScalar(1 - 0.6 * dt);
       // reel in so the arc never scrapes the street
-      const g = Math.max(0, Geo.height(p.x, p.z)); S.len = Math.min(S.len - 2.5 * dt, S.anchor.y - g - 2.5); if (S.len < 8) S.len = 8;
+      const g = Math.max(0, G.world.groundAt(p.x, p.z)); S.len = Math.min(S.len - 2.5 * dt, S.anchor.y - g - 2.5); if (S.len < 8) S.len = 8;
+      // air drag grows with speed, so the top speed feels natural rather than a hard cap
+      v.multiplyScalar(1 - 0.0016 * vs * dt);
       // a hard turn (or a second tap) fires a new web that way at once
       this.redirectT = (this.redirectT || 0) - dt;
       const hv = Math.hypot(v.x, v.z), turn = wl > 0.6 && hv > 4 ? (v.x * wish.x + v.z * wish.z) / hv : 1;
@@ -186,7 +195,7 @@ export class Player {
         this.wallT += dt; this.jumps = 1;
         if (into > 0.55) { v.y = damp(v.y, 13, 10, dt); v.x = -n.x * 2; v.z = -n.z * 2; gravity = 0; this.climbed = true; A.wall = 0.01; this.yaw = Math.atan2(-n.x, -n.z); }
         else { const tx = wish.x + n.x * into, tz = wish.z + n.z * into, tl = Math.hypot(tx, tz) || 1; v.x = tx / tl * 14 - n.x * 2; v.z = tz / tl * 14 - n.z * 2; v.y = Math.max(v.y, 2.2 - this.wallT * 2); gravity = 6; A.wall = (tx * n.z - tz * n.x) > 0 ? 1 : -1; }
-        if (Math.random() < dt * 20) G.fx.burst(_c.copy(p).setY(p.y + 0.1), 0xdddddd, 1, 1, 0.3, 0.7);
+        if (Math.random() < dt * 16) G.vfx.emit('dust', _c.copy(p).setY(p.y + 0.1), { n: 1, speed: 0.6, life: 0.7, size: 0.35 });
         if (I.hit.jump) { v.x = n.x * 10 + wish.x * 5; v.z = n.z * 10 + wish.z * 5; v.y = 13; this.wall = null; I.hit.jump = false; G.audio.jump(); }
       }
     } else if (this.climbed && !this.wall && !this.grounded && this.lastWall && wl > 0.2) { v.y = Math.max(v.y, 8); v.x -= this.lastWall.x * 5; v.z -= this.lastWall.z * 5; this.climbed = false; }   // vault over the ledge
@@ -194,15 +203,15 @@ export class Player {
     // jumping
     this.coyote = this.grounded ? 0.12 : this.coyote - dt;
     if (I.hit.jump && !this.dead && !this.zip) {
-      if (this.swing) { const d = this.swing.dir; this.endSwing(true); v.y = Math.max(v.y, 0) + 13; v.x += d.x * 6; v.z += d.z * 6; G.fx.ring(_c.copy(p), this.hero.rope, 3, 0.3); }
+      if (this.swing) { const d = this.swing.dir; this.endSwing(true); v.y = Math.max(v.y, 0) + 13; v.x += d.x * 6; v.z += d.z * 6; G.vfx.shock(_c.copy(p).setY(p.y + 0.9), { radius: 3, color: this.hero.rope, life: 0.3 }); G.vfx.emit('glow', _c, { n: 10, speed: 4, life: 0.4, size: 0.12, color: this.hero.rope }); }
       else if (this.coyote > 0) { v.y = 13.5 * (this.hero.jump || 1); this.jumps = 1; this.coyote = 0; this.grounded = false; G.audio.jump(); }
-      else if (this.jumps < 2) { v.y = Math.max(v.y, 0) * 0.3 + 12.5; this.jumps = 2; G.fx.ring(_c.copy(p), this.hero.rope, 2.2, 0.3); G.audio.jump(); if (wl > 0.1) { v.x += wish.x * 5; v.z += wish.z * 5; } }
+      else if (this.jumps < 2) { v.y = Math.max(v.y, 0) * 0.3 + 12.5; this.jumps = 2; G.vfx.shock(_c.copy(p).setY(p.y + 0.2), { radius: 2.2, color: this.hero.rope, life: 0.3, flat: true }); G.audio.jump(); if (wl > 0.1) { v.x += wish.x * 5; v.z += wish.z * 5; } }
     }
     if (!I.down.jump && v.y > 4 && !this.swing && !took && !this.zip && gravity > 10) v.y -= 22 * dt;
     this.gliding = false;
     if (this.hero.id === 'vesper' && I.down.jump && !this.grounded && !this.swing && !this.zip && v.y < -4 && this.jumps >= 1 && !this.wall) {
       this.gliding = true; v.y = damp(v.y, -4.5, 6, dt); gravity = 4; const f = wl > 0.1 ? wish : _c.set(v.x, 0, v.z).normalize(), hs = Math.hypot(v.x, v.z), tgt = Math.max(hs, 22);
-      v.x = damp(v.x, f.x * tgt, 1.6, dt); v.z = damp(v.z, f.z * tgt, 1.6, dt); A.fly = true; if (Math.random() < dt * 8) G.fx.burst(_c.copy(p).setY(p.y + 1), 0xffffff, 1, 1, 0.4, 0.6);
+      v.x = damp(v.x, f.x * tgt, 1.6, dt); v.z = damp(v.z, f.z * tgt, 1.6, dt); A.fly = true; if (Math.random() < dt * 14) { const sd = Math.random() < 0.5 ? 1 : -1; G.vfx.emit('glow', _c.set(p.x + Math.cos(this.yaw) * 0.8 * sd, p.y + 1.3, p.z - Math.sin(this.yaw) * 0.8 * sd), { n: 1, speed: 0.2, life: 0.5, size: 0.1, color: this.hero.rope }); }
     }
     v.y = Math.max(v.y - gravity * dt, -85);
     // integrate in small steps so fast movement cannot tunnel through walls
@@ -221,7 +230,7 @@ export class Player {
     // water: swim at the surface (Rime freezes it instead)
     this.swims = false;
     if (out.ground < -0.5 && p.y <= (this.hero.freezesWater ? 0.02 : -0.75)) { if (this.hero.freezesWater) { p.y = 0.02; if (Math.hypot(v.x, v.z) > 1 && Math.random() < dt * 30) G.fx.burst(p, 0xbfeaff, 1, 0.5, 1.2, 2.2); } else { p.y = -0.75; this.swims = true; if (Math.random() < dt * 10) G.fx.burst(_c.copy(p).setY(0), 0xffffff, 2, 2, 0.5, 1, 5); } if (v.y < 0) v.y = 0; grounded = true; }
-    if (grounded && !this.grounded && this.fallV < -24) { G.fx.ring(_c.copy(p).setY(p.y + 0.1), 0xffffff, 4, 0.35); G.shake = Math.max(G.shake, 0.3); G.audio.land(); }
+    if (grounded && !this.grounded && this.fallV < -24) { G.vfx.shock(_c.copy(p).setY(p.y + 0.1), { radius: 4, color: 0xdddddd, life: 0.35, flat: true }); G.vfx.emit('dust', _c, { n: 10, speed: 5, life: 1, size: 1, spread: 1 }); G.shake = Math.max(G.shake, 0.3); G.audio.land(); }
     this.fallV = v.y; this.grounded = grounded; if (grounded) this.jumps = 0; if (wall) this.lastWall = wall; this.wall = wall;
     this.speed = Math.hypot(v.x, v.z);
     // facing and animation
@@ -232,8 +241,34 @@ export class Player {
     const r = this.rig; r.root.position.copy(p); r.root.rotation.y = this.yaw; if (this.swims) r.root.position.y -= 0.35;
     r.root.rotation.z = damp(r.root.rotation.z, this.swing ? clamp(-(v.x * Math.cos(this.yaw) - v.z * Math.sin(this.yaw)) * 0.02, -0.5, 0.5) : 0, 8, dt);
     animateRig(r, A, dt);
-    if (this.rope.visible) { const to = this.swing ? this.swing.anchor : this.zip ? this.zip.to : null; if (to) { r.root.updateMatrixWorld(true); r.foreR.localToWorld(_c.set(0, -0.3, 0)); G.fx.place(this.rope, _c, to, 0.03); } else this.rope.visible = false; }
+    this.drawWeb(dt, r, A);
     G.audio.wind(v.length(), grounded);
+  }
+  // the web strand from the hand to the anchor: it shoots out, then hangs taut (or sags when slack); the hero hangs
+  // from it - body leaning along the line, the holding arm reaching straight up the web
+  drawWeb(dt, r, A) {
+    const to = this.rope.visible ? (this.swing ? this.swing.anchor : this.zip ? this.zip.to : null) : null;
+    const hanging = !!(to && this.swing), p = this.pos;
+    // body lean toward the anchor (pitch and roll in the hero's own frame), smoothed
+    let lx = 0, lz = 0;
+    if (hanging) { const u = _a.subVectors(to, p).normalize(), cy = Math.cos(this.yaw), sy = Math.sin(this.yaw), uf = u.x * sy + u.z * cy, ux = u.x * cy - u.z * sy; lx = clamp(Math.atan2(uf, Math.max(0.2, u.y)) * 0.85, -1.1, 1.1); lz = clamp(-Math.atan2(ux, Math.max(0.2, u.y)) * 0.8, -1, 1); }
+    this.lean.x = damp(this.lean.x, lx, 10, dt); this.lean.y = damp(this.lean.y, lz, 10, dt);
+    if (hanging || Math.abs(this.lean.x) + Math.abs(this.lean.y) > 0.01) { r.root.rotation.x = this.lean.x; r.root.rotation.z = this.lean.y; }
+    if (!to) { this.web.visible = this.webHalo.visible = false; return; }
+    const arm = this.hand > 0 ? r.armR : r.armL, fore = this.hand > 0 ? r.foreR : r.foreL;
+    r.root.updateMatrixWorld(true);
+    // aim the holding arm straight at the anchor: rotate the arm so its hanging axis (-y) points along the web
+    const par = arm.parent, q = new THREE.Quaternion(); par.getWorldQuaternion(q); const dirL = _b.subVectors(to, arm.getWorldPosition(_c)).normalize().applyQuaternion(q.invert());
+    arm.quaternion.setFromUnitVectors(_d.set(0, -1, 0), dirL); fore.rotation.set(-0.08, 0, 0); arm.updateMatrixWorld(true);
+    const hand = fore.localToWorld(_c.set(0, -0.3, 0));
+    this.webShoot = Math.min(1, this.webShoot + dt / Math.max(0.06, hand.distanceTo(to) / 450));
+    const k = this.webShoot, end = _d.lerpVectors(hand, to, k), L = hand.distanceTo(end), slack = this.swing ? clamp(this.swing.len - p.distanceTo(to), 0, 4) : 0;
+    for (let i = 0; i < 16; i++) { const f = i / 15, pt = this.ropePts[i].lerpVectors(hand, end, f); pt.y -= Math.sin(f * Math.PI) * ((1 - k) * L * 0.04 + slack * 0.35); }
+    // a slight wobble travels down the strand just after it attaches
+    if (k >= 1 && this.swing && this.swing.age < 0.4) { const w = (0.4 - this.swing.age) * 0.5; for (let i = 1; i < 15; i++) { const f = i / 15; this.ropePts[i].x += Math.sin(f * 20 - this.swing.age * 40) * w * Math.sin(f * Math.PI); } }
+    this.web.visible = this.webHalo.visible = true; this.web.setPoints(this.ropePts, 0.045); this.webHalo.setPoints(this.ropePts, 0.14); this.webHalo.alpha(0.35);
+    // speed: wind-blown motes streaming past while swinging fast
+    const sp = this.vel.length(); if (sp > 22 && Math.random() < dt * (sp - 18) * 1.5) { const f = _a.copy(this.vel).normalize(); G.vfx.emit('glow', _b.copy(p).addScaledVector(f, 8 + Math.random() * 6).add(_c.set((Math.random() - 0.5) * 8, Math.random() * 4 - 1, (Math.random() - 0.5) * 8)), { n: 1, speed: 0, life: 0.35, size: 0.05, color: 0xffffff, dir: _c.copy(f).multiplyScalar(-sp * 0.6) }); }
   }
   updateCamera(dt) {
     if (G.debugCam) { const c = G.debugCam; G.camera.position.set(c[0], c[1], c[2]); G.camera.lookAt(c[3], c[4], c[5]); return; }
@@ -251,7 +286,7 @@ export class Player {
     const r0 = pivot.clone(); G.world.raycast(r0, dir, dist + 0.4, hit); if (hit.hit) dist = Math.max(0.7, hit.t - 0.4);
     this.camDist = damp(this.camDist || dist, dist, dist < (this.camDist || 99) ? 30 : 6, dt);
     cam.position.copy(r0).addScaledVector(dir, this.camDist);
-    const g = Geo.height(cam.position.x, cam.position.z) + 0.35; if (cam.position.y < g) cam.position.y = g; if (cam.position.y < 0.3) cam.position.y = 0.3;
+    const g = G.world.groundAt(cam.position.x, cam.position.z) + 0.35; if (cam.position.y < g) cam.position.y = g; if (cam.position.y < 0.3) cam.position.y = 0.3;
     G.shake = Math.max(0, (G.shake || 0) - dt * 2.2); if (G.shake > 0) cam.position.add(_a.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(G.shake * 0.7));
     if (this.shoulder > 0.05) cam.lookAt(_a.copy(r0).addScaledVector(dir, -30)); else cam.lookAt(_a.copy(this.camT).setY(this.camT.y + 0.35));
     const fov = lerp(clamp(62 + sp * 0.5, 62, 96), w && w.zoom ? w.zoom : 48, aim); this.fov = damp(this.fov, fov, aim > 0.5 ? 14 : 4, dt); if (Math.abs(cam.fov - this.fov) > 0.05) { cam.fov = this.fov; cam.updateProjectionMatrix(); }

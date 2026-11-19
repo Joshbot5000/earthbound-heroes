@@ -9,6 +9,7 @@ import { Geo } from './geo.js';
 import { SkySystem } from './sky.js';
 import { World } from './world.js';
 import { FX } from './fx.js';
+import { VFX } from './vfx.js';
 import { Ents, Wanted } from './entities.js';
 import { Player } from './player.js';
 import { Powers, HEROES } from './powers.js';
@@ -33,7 +34,7 @@ const mobile = isTouch();
 let qName = 'Auto'; try { qName = localStorage.getItem('eh.q') || 'Auto'; } catch (e) { }
 if (qs.get('q')) qName = qs.get('q');
 const q = PRESETS[qName] || (mobile ? PRESETS.Medium : PRESETS.High);
-if (qs.get('debug')) { window.G = G; window.City = City; window.Landmarks = Landmarks; }
+if (qs.get('debug')) { window.G = G; window.THREE = { Raycaster: THREE.Raycaster }; window.City = City; window.Landmarks = Landmarks; }
 G.qName = qName; G.time = 0; G.state = 'boot'; G.shake = 0;
 G.stats = { renown: 0, defeated: 0, orbs: 0, infected: 0, crews: 0 };
 let save = {}; try { save = JSON.parse(localStorage.getItem('eh.save') || '{}'); } catch (e) { }
@@ -64,7 +65,7 @@ async function boot() {
   const resize = () => { const w = innerWidth, h = innerHeight; renderer.setPixelRatio(baseDpr * scale); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); if (composer) { composer.setPixelRatio(baseDpr * scale); composer.setSize(w, h); } };
   addEventListener('resize', resize); addEventListener('orientationchange', () => setTimeout(resize, 200));
 
-  G.audio = new Audio(); G.fx = new FX(scene); G.sky = new SkySystem(scene, renderer, mobile); G.world = new World(scene, q);
+  G.audio = new Audio(); G.fx = new FX(scene); G.vfx = new VFX(scene); G.renderer = renderer; G.sky = new SkySystem(scene, renderer, mobile); G.world = new World(scene, q);
   G.props = new Props(scene, q); G.ents = new Ents(q); G.wanted = new Wanted(); G.ui = new UI(); G.player = new Player(HEROES); G.powers = new Powers(); G.weapons = new Weapons(); G.weapons.select(0);
   if (qs.get('t')) G.sky.timeOffset = +qs.get('t');
 
@@ -129,7 +130,7 @@ async function boot() {
     if (G.state === 'title') { I.mx = I.my = 0; I.lookX = dt * 0.12; I.lookY = (0.12 - G.player.camPitch) * dt; for (const k in I.hit) I.hit[k] = false; }
     G.player.update(dt); G.weapons.update(dt); G.powers.update(dt); G.ents.update(dt); G.wanted.update(dt); G.props.update(dt); Landmarks.update(dt);
     G.world.update(G.player.pos.x, G.player.pos.z, mobile ? 5 : 7); G.sky.cityGlow = City.inside(G.player.pos.x, G.player.pos.z) ? 1 : Geo.urban(G.player.pos.x, G.player.pos.z); G.sky.update(dt, camera); G.world.setLighting(G.sky.night, G.powers.blackoutT > 0); setVehicleLights(G.sky.night);
-    G.fx.update(dt); G.audio.frame(dt); if (G.state === 'play') G.ui.frame(dt);
+    G.fx.update(dt); G.vfx.update(dt); G.audio.frame(dt); if (G.state === 'play') G.ui.frame(dt);
     I.lookX = I.lookY = 0; for (const k in I.hit) I.hit[k] = false;
     if (bloom) { const n = G.sky.night; bloom.enabled = n > 0.15; bloom.strength = n * 0.6; bloom.threshold = 1.6 - n * 0.7; bloom.radius = 0.5; }
     if (composer) composer.render(); else renderer.render(scene, camera);
