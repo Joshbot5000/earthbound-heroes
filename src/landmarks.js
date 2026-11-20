@@ -19,6 +19,21 @@ function MAT() {
   const ashlar = canvas(128, 128, (x, w, h) => { x.fillStyle = '#d8b884'; x.fillRect(0, 0, w, h); for (let r = 0; r < 8; r++) for (let k = -1; k < 5; k++) { const v = 200 + Math.random() * 40 | 0; x.fillStyle = `rgb(${v},${v * 0.86 | 0},${v * 0.62 | 0})`; x.fillRect(k * 32 + (r % 2) * 16 + 1, r * 16 + 1, 30, 14); } }); ashlar.repeat.set(4, 6);
   const tiles = canvas(128, 128, (x, w, h) => { x.fillStyle = '#f2efe6'; x.fillRect(0, 0, w, h); x.strokeStyle = 'rgba(160,150,130,0.5)'; for (let i = 0; i < w; i += 8) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 30, h); x.stroke(); } });
   const curtain = canvas(64, 64, (x, w, h) => { x.fillStyle = '#7d93a6'; x.fillRect(0, 0, w, h); x.fillStyle = 'rgba(30,40,50,0.8)'; x.fillRect(0, 0, w, 3); x.fillRect(0, 0, 3, h); x.fillStyle = 'rgba(255,255,255,0.12)'; x.fillRect(5, 5, 20, 50); });
+  // weathered limestone blocks with darker joints and streaks of grime running down
+  const lime = canvas(256, 256, (x, w, h) => { x.fillStyle = '#e4dccb'; x.fillRect(0, 0, w, h); for (let r = 0; r < 16; r++) for (let k = -1; k < 6; k++) { const v = 205 + Math.random() * 30 | 0; x.fillStyle = `rgb(${v},${v - 6},${v - 20})`; x.fillRect(k * 48 + (r % 2) * 24 + 1, r * 16 + 1, 46, 14); }
+    for (let i = 0; i < 40; i++) { const gx = Math.random() * w; const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, 'rgba(60,55,45,0)'); g.addColorStop(1, 'rgba(60,55,45,0.18)'); x.fillStyle = g; x.fillRect(gx, Math.random() * h * 0.5, 2 + Math.random() * 6, h); } }); lime.repeat.set(6, 6);
+  // the White House: painted sandstone, two rows of pedimented windows
+  const whw = canvas(256, 128, (x, w, h) => { x.fillStyle = '#f4f2ec'; x.fillRect(0, 0, w, h); for (let i = 0; i < 4; i++) { const cx = i * 64 + 32; for (const [y, ph] of [[18, 1], [74, 0]]) { x.fillStyle = '#2a3036'; x.fillRect(cx - 9, y, 18, 32); x.fillStyle = '#c9cfd4'; x.fillRect(cx - 1, y, 2, 32); x.fillRect(cx - 9, y + 15, 18, 2); x.fillStyle = '#e2ded4'; if (ph) { x.beginPath(); x.moveTo(cx - 13, y - 2); x.lineTo(cx, y - 10); x.lineTo(cx + 13, y - 2); x.fill(); } else x.fillRect(cx - 12, y - 5, 24, 4); } } x.fillStyle = '#dcd8cc'; x.fillRect(0, 60, w, 3); }); whw.repeat.set(4, 1);
+  // Empire State: limestone piers with recessed window strips and aluminium spandrels; lit windows at night
+  const deco = (lit) => canvas(128, 256, (x, w, h) => { x.fillStyle = lit ? '#000' : '#cfc6b4'; x.fillRect(0, 0, w, h); for (let i = 0; i < 8; i++) for (let j = 0; j < 32; j++) { const on = Math.random() < 0.35; x.fillStyle = lit ? (on ? `rgb(255,${200 + Math.random() * 40 | 0},140)` : '#000') : (j % 2 ? '#3a4048' : '#8a9096'); x.fillRect(i * 16 + 5, j * 8 + 1, 7, 6); } });
+  const decoT = deco(false), decoL = deco(true); decoT.repeat.set(4, 30); decoL.repeat.copy(decoT.repeat);
+  // Doric column fluting
+  const flute = canvas(128, 32, (x, w, h) => { for (let i = 0; i < 20; i++) { const g = x.createLinearGradient(i * w / 20, 0, (i + 1) * w / 20, 0); g.addColorStop(0, '#c8b896'); g.addColorStop(0.5, '#efe3c8'); g.addColorStop(1, '#bfae8a'); x.fillStyle = g; x.fillRect(i * w / 20, 0, w / 20, h); } });
+  // grey Great Wall brick on a stone base
+  const wallT = canvas(128, 128, (x, w, h) => { x.fillStyle = '#7e7a72'; x.fillRect(0, 0, w, h); for (let r = 0; r < 16; r++) for (let k = -1; k < 9; k++) { const v = 105 + Math.random() * 40 | 0; x.fillStyle = `rgb(${v},${v - 3},${v - 10})`; x.fillRect(k * 16 + (r % 2) * 8 + 1, r * 8 + 1, 14, 6); } }); wallT.repeat.set(1, 1);
+  // Sagrada Família: rough sandstone with vertical ribs and pierced openings
+  const sagT = canvas(128, 256, (x, w, h) => { x.fillStyle = '#c9a982'; x.fillRect(0, 0, w, h); for (let i = 0; i < 6; i++) { x.fillStyle = 'rgba(70,50,30,0.35)'; x.fillRect(i * 22 + 4, 0, 4, h); } for (let j = 0; j < 14; j++) for (let i = 0; i < 3; i++) { x.fillStyle = 'rgba(25,18,12,0.85)'; x.beginPath(); x.ellipse(i * 44 + 22, j * 18 + 9, 5, 6, 0, 0, 7); x.fill(); } for (let i = 0; i < 300; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? '255,240,210' : '60,40,25'},0.12)`; x.fillRect(Math.random() * w, Math.random() * h, 3, 3); } }); sagT.repeat.set(2, 6);
+  const rose = canvas(128, 128, (x, w, h) => { x.fillStyle = '#d8ccb0'; x.fillRect(0, 0, w, h); x.translate(64, 64); x.fillStyle = '#1a1830'; x.beginPath(); x.arc(0, 0, 60, 0, 7); x.fill(); const cols = ['#2a3a9a', '#9a2a3a', '#2a7a5a', '#c8a030']; for (let k = 0; k < 3; k++) for (let i = 0; i < 12 * (k + 1); i++) { const a = i / (12 * (k + 1)) * 6.283; x.fillStyle = cols[(i + k) % 4]; x.beginPath(); x.arc(Math.cos(a) * (14 + k * 16), Math.sin(a) * (14 + k * 16), 5 + k, 0, 7); x.fill(); } x.strokeStyle = '#d8ccb0'; x.lineWidth = 2; for (let i = 0; i < 24; i++) { const a = i / 24 * 6.283; x.beginPath(); x.moveTo(0, 0); x.lineTo(Math.cos(a) * 60, Math.sin(a) * 60); x.stroke(); } });
   const S = (o) => new THREE.MeshStandardMaterial(o), P = (o) => new THREE.MeshPhysicalMaterial(o);
   Object.assign(mats, {
     stone: S({ color: 0xd8c8a0, roughness: 0.85, map: gothic }), stonePlain: S({ color: 0xd9ccaa, roughness: 0.85 }), portland: S({ color: 0xe6e0d0, roughness: 0.8 }),
@@ -32,6 +47,12 @@ function MAT() {
     concrete: S({ color: 0xbab6ae, roughness: 0.85 }), redsand: S({ color: 0xa8523a, roughness: 0.85 }),
     clock: S({ map: clockTex(), emissiveMap: null, emissive: 0xfff4d8, emissiveIntensity: 0.05, roughness: 0.4 }), flag: S({ map: unionFlag(), side: THREE.DoubleSide, roughness: 0.8 }),
     lens: S({ color: 0xfff4d0, emissive: 0xffe4a0, emissiveIntensity: 0.3 }),
+    lime: S({ map: lime, roughness: 0.9 }), whiteHouse: S({ map: whw, roughness: 0.75 }), whitePaint: S({ color: 0xf4f2ec, roughness: 0.7 }),
+    deco: S({ color: 0xc4bba8, map: decoT, emissiveMap: decoL, emissive: 0xffffff, emissiveIntensity: 0, roughness: 0.75 }), decoTop: S({ color: 0xd8d2c4, roughness: 0.6, emissive: 0xffd890, emissiveIntensity: 0 }),
+    pentelic: S({ color: 0xe8dcc2, roughness: 0.85, map: flute }), pentelicPlain: S({ color: 0xe2d4b6, roughness: 0.9 }), rock: S({ color: 0xb8a68a, roughness: 1, flatShading: true }),
+    wallBrick: S({ map: wallT, roughness: 0.95 }), sagrada: S({ map: sagT, roughness: 0.95 }), sagTop: S({ color: 0xe8d8b0, roughness: 0.6 }),
+    bridgeGrey: S({ color: 0x737d84, roughness: 0.55, metalness: 0.5 }), granite: S({ color: 0xb5a58a, roughness: 0.9, map: ashlar }), rose: S({ map: rose, roughness: 0.4, emissive: 0x403060, emissiveIntensity: 0 }),
+    paintRed: S({ color: 0xb02a2a, roughness: 0.5 }), paintGreen: S({ color: 0x2f8a4a, roughness: 0.5 }), paintBlue: S({ color: 0x2a5aa8, roughness: 0.5 }), paintYellow: S({ color: 0xe0b030, roughness: 0.5 }),
   });
   mats.clock.emissiveMap = mats.clock.map;
   return mats;
@@ -142,6 +163,15 @@ export const LANDMARKS = [
   { name: 'Brandenburg Gate', lat: 52.51628, lon: 13.37770, hide: 30, build: () => { const b = new B(), m = MAT(); for (let i = 0; i < 6; i++) b.cyl(0.9, 0.85, 15, m.stonePlain, -26 + i * 10.4, 0, 0, 16); b.box(65, 5, 11, m.stonePlain, 0, 15, 0); b.box(14, 4, 6, m.stonePlain, 0, 20, 0); b.box(5, 4, 3, m.copper, 0, 24, 0, false); return b; } },
   { name: 'Christ the Redeemer', lat: -22.95194, lon: -43.21048, hide: 0, build: () => { const b = new B(), m = MAT(); b.box(8, 8, 8, m.stonePlain, 0, 0, 0); b.cyl(3, 2.2, 22, m.white, 0, 8, 0, 16); b.box(28, 3.2, 2.4, m.white, 0, 25, 0); b.sphere(1.8, m.white, 0, 31.5, 0); return b; } },
   { name: "St Basil's Cathedral", lat: 55.75253, lon: 37.62308, hide: 30, build: () => { const b = new B(), m = MAT(); b.box(30, 18, 30, m.redsand, 0, 0, 0); b.cyl(5, 5, 18, m.redsand, 0, 18, 0, 8); b.cone(5, 14, m.copper, 0, 36, 0, 8, 0); const c = [0xd02a2a, 0x2a8a3a, 0xe0b020, 0x2a5ac0, 0xd06a20, 0x1a8a8a, 0xc02a8a, 0x8a2ad0]; for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, r = i % 2 ? 9 : 12; b.cyl(3, 3, 14, m.redsand, Math.cos(a) * r, 18, Math.sin(a) * r, 8); const o = new B(); onion(o, 3, 0, new THREE.MeshStandardMaterial({ color: c[i], roughness: 0.4 }), 0.5); o.g.position.set(Math.cos(a) * r, 32, Math.sin(a) * r); b.g.add(o.g); } return b; } },
+  // batch 2
+  { name: 'White House', lat: 38.89768, lon: -77.03653, hide: 150, build: whiteHouse },
+  { name: 'Great Wall of China (Badaling)', lat: 40.35910, lon: 116.01890, hide: 60, build: greatWall },
+  { name: 'Arc de Triomphe', lat: 48.87380, lon: 2.29504, hide: 30, build: arcDeTriomphe },
+  { name: 'Empire State Building', lat: 40.74844, lon: -73.98566, hide: 45, build: empireState },
+  { name: 'Sagrada Família', lat: 41.40363, lon: 2.17436, hide: 70, rot: 0.785, build: sagrada },
+  { name: 'Parthenon (Acropolis)', lat: 37.97153, lon: 23.72575, hide: 170, build: parthenon },
+  { name: 'Sydney Harbour Bridge', lat: -33.85224, lon: 151.21082, hide: 40, rot: 0.33, build: harbourBridge },
+  { name: 'Notre-Dame de Paris', lat: 48.85297, lon: 2.34989, hide: 50, rot: 0.33, build: notreDame },
 ];
 
 function spiralTex() { return canvas(256, 256, (x, w, h) => { x.fillStyle = '#5a7a8a'; x.fillRect(0, 0, w, h); x.strokeStyle = 'rgba(20,30,40,0.9)'; x.lineWidth = 10; for (let i = -4; i < 8; i++) { x.beginPath(); x.moveTo(i * 64, 0); x.lineTo(i * 64 + 128, h); x.stroke(); } x.strokeStyle = 'rgba(255,255,255,0.15)'; x.lineWidth = 1; for (let i = 0; i < w; i += 12) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, h); x.stroke(); x.beginPath(); x.moveTo(0, i); x.lineTo(w, i); x.stroke(); } }); }
@@ -246,6 +276,196 @@ function latticeTower(base, h, decks, col) {
 }
 function ggTower() { const b = new B(), m = MAT(); for (const s of [-1, 1]) b.box(10, 227, 11, m.redsteel, s * 14, 0, 0); for (const y of [70, 120, 165, 205]) b.box(38, 8, 9, m.redsteel, 0, y, 0); b.box(30, 4, 24, m.redsteel, 0, 66, 0); return b; }
 
+// ---------- batch 2: White House, Great Wall, Arc de Triomphe, Empire State, Sagrada Família, Parthenon, Sydney Harbour Bridge, Notre-Dame ----------
+// triangular gable (pediment) of width w, height h, depth d, facing along z
+function pediment(b, w, h, d, mat, x, y, z, ry = 0) { const sh = new THREE.Shape(); sh.moveTo(-w / 2, 0); sh.lineTo(w / 2, 0); sh.lineTo(0, h); sh.closePath(); const g = new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: false }); g.translate(0, 0, -d / 2); return b.mesh(g, mat, x, y, z, ry); }
+// solid wall above a round-headed opening of width w: fills the spandrels between the arch and a flat top of height h
+function archFill(b, w, h, d, mat, x, y, z, ry = 0) { const r = w / 2, sh = new THREE.Shape(); sh.moveTo(-r, 0); sh.lineTo(-r, h); sh.lineTo(r, h); sh.lineTo(r, 0); sh.absarc(0, 0, r, 0, Math.PI, false); const g = new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: false, curveSegments: 20 }); g.translate(0, 0, -d / 2); return b.mesh(g, mat, x, y, z, ry); }
+function column(b, r, h, mat, x, y, z, cap = true) { const m = MAT(); b.cyl(r, r * 0.86, h, mat, x, y, z, 20, false); if (cap) b.box(r * 2.6, r * 0.5, r * 2.6, m.pentelicPlain, x, y + h, z, false); }
+
+function whiteHouse() {
+  const b = new B(), m = MAT(), W = 52, D = 26, H = 18;
+  b.box(W, H, D, m.whiteHouse, 0, 0, 0);
+  b.box(W + 1.2, 1.2, D + 1.2, m.whitePaint, 0, H, 0, false);                                  // cornice
+  for (let i = 0; i < 26; i++) for (const s of [-1, 1]) b.box(0.4, 1.1, 0.4, m.whitePaint, -W / 2 + 1 + i * 2, H + 1.2, s * (D / 2 + 0.3), false);   // balustrade
+  b.box(W - 4, 2.4, D - 4, m.concrete, 0, H, 0, false); b.box(W - 10, 1.2, D - 10, m.slate, 0, H + 2.4, 0, false);
+  for (const cx of [-14, -4, 4, 14]) { b.box(1.4, 3.5, 1.4, m.whitePaint, cx, H + 2, -D / 2 + 4, false); b.box(1.4, 3.5, 1.4, m.whitePaint, cx, H + 2, D / 2 - 4, false); }   // chimneys
+  // north portico: a porte-cochère of Ionic columns under a pediment
+  for (let i = 0; i < 4; i++) for (const zz of [-D / 2 - 9, -D / 2 - 4]) column(b, 0.65, H - 2, m.whitePaint, -7.5 + i * 5, 0, zz);
+  b.box(19, 2, 11, m.whitePaint, 0, H - 2, -D / 2 - 5.5); pediment(b, 20, 4.5, 11, m.whitePaint, 0, H, -D / 2 - 5.5);
+  b.box(16, 0.6, 12, m.stonePlain, 0, 0, -D / 2 - 6, false);
+  // south portico: the bowed colonnade with its balcony
+  for (let i = 0; i < 6; i++) { const a = Math.PI * (0.12 + i / 5 * 0.76); column(b, 0.6, H - 2, m.whitePaint, Math.cos(a) * 10, 0, D / 2 + Math.sin(a) * 6); }
+  const bow = new THREE.CylinderGeometry(10.8, 10.8, 1.6, 32, 1, false, 0, Math.PI); bow.scale(1, 1, 0.62); b.mesh(bow, m.whitePaint, 0, H - 1.2, D / 2, Math.PI / 2);
+  const bal = new THREE.CylinderGeometry(10.4, 10.4, 1, 32, 1, true, 0, Math.PI); bal.scale(1, 1, 0.6); const bm = b.mesh(bal, m.whitePaint, 0, H - 2 + 9 * 0, D / 2, Math.PI / 2); bm.position.y = 8.5;
+  b.solids.push([0, D / 2 + 3, 20, 7, 0, H, 0]);
+  // the low colonnades to the East and West Wings, and the wings themselves
+  for (const s of [-1, 1]) { b.box(30, 5, 8, m.whitePaint, s * (W / 2 + 15), 0, 4); b.box(26, 8, 22, m.whiteHouse, s * (W / 2 + 43), 0, 0); b.box(26.6, 0.8, 22.6, m.whitePaint, s * (W / 2 + 43), 8, 0, false); }
+  b.cyl(0.12, 0.08, 9, m.white, 0, H + 3.6, 0, 6, false);
+  const f = new THREE.Mesh(new THREE.PlaneGeometry(4, 2.2, 8, 1), MAT().usFlag || (MAT().usFlag = new THREE.MeshStandardMaterial({ map: usFlag(), side: THREE.DoubleSide, roughness: 0.8 }))); f.position.set(2.05, H + 11.4, 0); b.g.add(f); b.g.userData.flag = f;
+  // the lawns and the fountain
+  b.box(180, 0.15, 260, new THREE.MeshStandardMaterial({ color: 0x4f7a34, roughness: 1 }), 0, -0.12, 30, false); b.box(10, 0.2, 40, m.stonePlain, 0, -0.05, -D / 2 - 30, false); b.cyl(5, 5, 0.6, m.whitePaint, 0, 0, D / 2 + 45, 24, false);
+  return b;
+}
+function usFlag() { return canvas(120, 64, (x) => { for (let i = 0; i < 13; i++) { x.fillStyle = i % 2 ? '#fff' : '#b22234'; x.fillRect(0, i * 64 / 13, 120, 64 / 13 + 0.5); } x.fillStyle = '#3c3b6e'; x.fillRect(0, 0, 50, 34); x.fillStyle = '#fff'; for (let r = 0; r < 9; r++) for (let c = 0; c < (r % 2 ? 5 : 6); c++) x.fillRect(3 + c * 8 + (r % 2) * 4, 2 + r * 3.6, 1.6, 1.6); }); }
+
+function arcDeTriomphe() {
+  const b = new B(), m = MAT(), W = 45, D = 22, H = 50, aw = 14.6, ah = 29.2, tw = 8.4, th = 18.7;
+  const pw = (W - aw) / 2, px = aw / 2 + pw / 2;
+  const spring = ah - aw / 2;
+  for (const s of [-1, 1]) {
+    // each pier is pierced by the smaller side arch, running through it east-west
+    for (const zz of [-1, 1]) b.box(pw, spring, (D - tw) / 2, m.lime, s * px, 0, zz * (tw / 2 + (D - tw) / 4));
+    archFill(b, tw, spring - (th - tw / 2), pw, m.lime, s * px, th - tw / 2, 0, Math.PI / 2);
+    b.box(pw, aw / 2 + 0.6, D, m.lime, s * px, spring, 0);
+  }
+  archFill(b, aw, aw / 2 + 0.6, D, m.lime, 0, ah - aw / 2, 0);
+  b.box(W, H - ah - 0.6, D, m.lime, 0, ah + 0.6, 0);
+  // cornice, frieze band and attic
+  b.box(W + 1.6, 1.4, D + 1.6, m.stonePlain, 0, 38, 0, false); b.box(W + 0.6, 3, D + 0.6, m.stonePlain, 0, 34, 0, false); b.box(W + 1, 1, D + 1, m.stonePlain, 0, H - 1, 0, false);
+  for (let i = 0; i < 30; i++) for (const s of [-1, 1]) b.box(0.9, 1.6, 0.4, m.stonePlain, -W / 2 + 1 + i * 1.48, 39.4, s * (D / 2 + 0.6), false);
+  // the four sculpture groups on the main faces
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { b.box(8, 11, 1.4, m.stonePlain, sx * px, 3, sz * (D / 2 + 0.7), false); b.box(4, 4, 1.6, m.stonePlain, sx * px, 14, sz * (D / 2 + 0.8), false); }
+  // Place Charles de Gaulle around it
+  b.cyl(55, 55, 0.12, new THREE.MeshStandardMaterial({ color: 0xa89f90, roughness: 0.95 }), 0, -0.08, 0, 48, false);
+  return b;
+}
+
+function empireState() {
+  const b = new B(), m = MAT();
+  for (const [w, d, y0, y1] of [[129, 57, 0, 25], [92, 50, 25, 40], [58, 44, 40, 280], [46, 34, 280, 300], [36, 26, 300, 320]]) b.box(w, y1 - y0, d, y1 - y0 > 30 ? m.deco : m.lime, 0, y0, 0);
+  // the four corner wings that step back up the shaft
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box(10, 210, 8, m.deco, sx * 24, 40, sz * 24, false);
+  // mooring mast, observatory lantern and antenna
+  b.cyl(9, 7, 22, m.decoTop, 0, 320, 0, 8); b.cyl(6.5, 5, 18, m.decoTop, 0, 342, 0, 8); b.cyl(4.5, 3, 12, m.decoTop, 0, 360, 0, 8); b.cone(3.2, 9, m.decoTop, 0, 372, 0, 8, 0);
+  b.cyl(0.8, 0.4, 62, m.iron, 0, 381, 0, 6, false);
+  return b;
+}
+
+function sagrada() {
+  const b = new B(), m = MAT();
+  // nave and transept with steep roofs, the apse at the far end
+  b.box(28, 45, 90, m.sagrada, 0, 0, 0); b.box(60, 45, 26, m.sagrada, 0, 0, -6);
+  b.box(14, 10, 90, m.sagrada, -21, 0, 0, false); b.box(14, 10, 90, m.sagrada, 21, 0, 0, false);
+  const rf = new THREE.ConeGeometry(17, 16, 4, 1); rf.rotateY(Math.PI / 4); rf.scale(1, 1, 3.6); b.mesh(rf, m.sagTop, 0, 53, 0);
+  b.cyl(14, 14, 40, m.sagrada, 0, 0, -45, 16);
+  // a spindle tower: a bulging, tapering body, pierced near the top, crowned with a bright finial
+  const spindle = (x, z, h, r, col) => {
+    const pts = []; for (let i = 0; i <= 14; i++) { const t = i / 14; pts.push([Math.max(0.3, r * (1 + 0.15 * Math.sin(t * Math.PI)) * (1 - t ** 1.8 * 0.92)), t * h]); } pts.push([0.01, h]);
+    b.lathe(pts, m.sagrada, x, 0, z, 16); b.sphere(r * 0.42, col || m.sagTop, x, h + r * 0.2, z); b.solids.push([x, z, r * 1.8, r * 1.8, 0, h * 0.7, 0]);
+  };
+  const cols = [m.paintRed, m.paintYellow, m.paintGreen, m.paintBlue];
+  for (const [fx, fz, rot] of [[30, -6, 1], [-30, -6, 1], [0, 46, 0]]) for (let i = 0; i < 4; i++) { const o = (i - 1.5) * 8, h = [98, 112, 112, 98][i]; spindle(fx + (rot ? 0 : o), fz + (rot ? o : 0), h, 4.5, cols[i]); }
+  for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; spindle(Math.cos(a) * 14, -6 + Math.sin(a) * 14, 135, 6.5); }
+  spindle(0, -36, 138, 6.5, m.gold);
+  spindle(0, -6, 172.5, 9, m.white); b.box(7, 1.6, 1.6, m.white, 0, 176, -6, false); b.box(1.6, 1.6, 7, m.white, 0, 176, -6, false); b.box(1.6, 7, 1.6, m.white, 0, 173, -6, false);
+  return b;
+}
+
+function parthenon(I) {
+  const b = new B(), m = MAT();
+  // the Acropolis: a steep limestone outcrop about 70 m above the city, flat on top
+  const hill = new THREE.CylinderGeometry(1, 1.35, 1, 28, 6); const a = hill.attributes.position;
+  for (let i = 0; i < a.count; i++) { const x = a.getX(i), y = a.getY(i), z = a.getZ(i), n = 0.88 + 0.12 * Math.sin(Math.atan2(z, x) * 5 + 1.3) + 0.06 * Math.sin(Math.atan2(z, x) * 13); a.setXYZ(i, x * n * (y > 0.45 ? 1 : 1 + (Math.random() - 0.5) * 0.05), y, z * n); }
+  hill.scale(150, 72, 78); hill.translate(0, 36 - 6, 0); hill.computeVertexNormals(); b.mesh(hill, m.rock, 0, 0, 0);
+  for (let k = 0; k < 6; k++) b.solids.push([0, 0, 260 - k * 4, 130 - k * 4, -6, 66, 0]);
+  const top = 66, px = 30;   // the Parthenon stands east of centre on the summit
+  b.box(80, 0.5, 40, m.pentelicPlain, px, top, 0, false);
+  for (let k = 0; k < 3; k++) b.box(72.5 - k * 1.5, 0.55, 33.9 - k * 1.5, m.pentelicPlain, px, top + k * 0.55, 0);
+  const sy = top + 1.65, ch = 10.4, L = 69.5, Wd = 30.9;
+  // 8 columns on each end, 17 down each side (corners shared)
+  for (let i = 0; i < 8; i++) for (const s of [-1, 1]) column(b, 0.95, ch, m.pentelic, px + s * (L / 2 - 1.5), sy, -Wd / 2 + 1.5 + i * (Wd - 3) / 7);
+  for (let i = 1; i < 16; i++) for (const s of [-1, 1]) { if (i === 6 && s > 0) continue; column(b, 0.95, ch, m.pentelic, px - L / 2 + 1.5 + i * (L - 3) / 16, sy, s * (Wd / 2 - 1.5)); }
+  b.box(L - 1, 3.3, Wd - 1, m.pentelicPlain, px, sy + ch + 0.5, 0, false);
+  // only the west pediment survives in part; the roof is gone
+  pediment(b, Wd - 1, 4.2, 2, m.pentelicPlain, px - L / 2 + 1.5, sy + ch + 3.8, 0, Math.PI / 2);
+  pediment(b, (Wd - 1) * 0.55, 2.3, 2, m.pentelicPlain, px + L / 2 - 1.5, sy + ch + 3.8, -(Wd - 1) * 0.2, Math.PI / 2);
+  // the ruined cella walls inside
+  for (const s of [-1, 1]) b.box(48, 6 + s, 1.6, m.pentelicPlain, px, sy, s * 9.5); b.box(1.6, 8, 19, m.pentelicPlain, px - 24, sy, 0);
+  b.solids.push([px, 0, L, Wd, top, sy + ch + 3.8, 0]);
+  // the Erechtheion's porch of the maidens, north of the Parthenon, and the Propylaea gateway at the west end
+  b.box(23, 9, 12, m.pentelicPlain, px - 35, top, -32); for (let i = 0; i < 3; i++) column(b, 0.5, 5, m.pentelic, px - 44 + i * 2.5, top + 1, -24);
+  b.box(28, 12, 18, m.pentelicPlain, -110, top, 0); for (let i = 0; i < 6; i++) column(b, 0.8, 8.5, m.pentelic, -100, top + 0.5, -7.5 + i * 3);
+  return b;
+}
+
+function harbourBridge() {
+  const b = new B(), m = MAT(), span = 503, half = span / 2, deck = 49, apex = 134, xs = 15;
+  // granite pylons at both ends
+  for (const sz of [-1, 1]) for (const sx of [-1, 1]) { b.box(17, 89, 22, m.granite, sx * 27, 0, sz * (half + 14)); b.box(19, 3, 24, m.granite, sx * 27, 86, sz * (half + 14), false); }
+  // two arch trusses: an upper and a lower chord joined by a web of steel
+  const chord = (yf) => { const pts = []; for (let i = 0; i <= 40; i++) { const z = -half + i / 40 * span; pts.push(new THREE.Vector3(0, yf(z), z)); } return pts; };
+  const up = z => apex - (apex - deck - 8) * (z / half) ** 2, lo = z => (apex - 18) * (1 - (z / half) ** 2) + 4;
+  const tube = (pts, r, mat, x) => { const c = new THREE.CatmullRomCurve3(pts); const g = new THREE.TubeGeometry(c, 80, r, 6, false); g.translate(x, 0, 0); b.mesh(g, mat); };
+  const webMat = m.lattice.clone(); webMat.color = new THREE.Color(0x737d84); webMat.map = m.lattice.map.clone(); webMat.map.repeat.set(40, 2); webMat.map.needsUpdate = true;
+  for (const sx of [-1, 1]) {
+    tube(chord(up), 1.4, m.bridgeGrey, sx * xs); tube(chord(lo), 1.8, m.bridgeGrey, sx * xs);
+    // the truss web between the chords as a lattice ribbon
+    const P = [], N = 60; for (let i = 0; i <= N; i++) { const z = -half + i / N * span; P.push(sx * xs, up(z), z, sx * xs, Math.min(up(z), lo(z)), z); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); const uv = []; for (let i = 0; i <= N; i++) uv.push(i / N, 1, i / N, 0); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    const idx = []; for (let i = 0; i < N; i++) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2); g.setIndex(idx); g.computeVertexNormals(); b.mesh(g, webMat);
+  }
+  // cross bracing between the two arches and hangers down to the deck
+  for (let i = 1; i < 20; i++) { const z = -half + i / 20 * span, y = up(z); if (y > deck + 6) b.box(xs * 2, 1.2, 1.2, m.bridgeGrey, 0, y - 1, z, false); const yl = lo(z); if (yl > deck + 2) for (const sx of [-1, 1]) b.box(0.5, yl - deck, 0.5, m.bridgeGrey, sx * xs, deck, z, false); }
+  // the deck: eight traffic lanes, rail tracks and footways, 49 m above the water
+  b.box(49, 2.5, span + 56, m.concrete, 0, deck - 2.5, 0); b.box(46, 0.1, span + 56, new THREE.MeshStandardMaterial({ color: 0x3a3c40, roughness: 0.9 }), 0, deck, 0, false);
+  for (const sx of [-1, 1]) b.box(0.4, 1.2, span + 56, m.bridgeGrey, sx * 24, deck, 0, false);
+  for (let k = 0; k < 10; k++) { const z0 = -half + k * span / 10, z1 = z0 + span / 10, zm = (z0 + z1) / 2; for (const sx of [-1, 1]) b.solids.push([sx * xs, zm, 4, span / 10, Math.min(lo(z0), lo(z1)) - 2, Math.max(up(z0), up(z1)), 0]); }
+  return b;
+}
+
+function notreDame() {
+  const b = new B(), m0 = MAT(), L = 128, m = Object.assign({}, m0, { stone: m0.lime, stonePlain: m0.lime });
+  // twin west towers and the facade between them, with the rose window
+  for (const s of [-1, 1]) { b.box(15, 69, 15, m.stone, -L / 2 + 7.5, 0, s * 13); b.box(16, 1.2, 16, m.stonePlain, -L / 2 + 7.5, 69, s * 13, false); }
+  b.box(12, 46, 11, m.stone, -L / 2 + 7.5, 0, 0);
+  const rw = new THREE.Mesh(new THREE.CircleGeometry(4.8, 40), m.rose); rw.position.set(-L / 2 - 0.05, 30, 0); rw.rotation.y = -Math.PI / 2; b.g.add(rw);
+  for (const zz of [-6, 0, 6]) b.box(0.6, 9, 4, m.dark, -L / 2 - 0.2, 0, zz, false);
+  b.box(0.6, 3, 26, m.stonePlain, -L / 2 - 0.3, 20, 0, false);   // gallery of kings
+  // nave, aisles, transept and the round apse
+  b.box(L - 15, 33, 13, m.stone, 7.5, 0, 0); for (const s of [-1, 1]) b.box(L - 25, 20, 9, m.stone, 6, 0, s * 11);
+  const roof = new THREE.ConeGeometry(9.3, 10, 4, 1); roof.rotateY(Math.PI / 4); roof.scale(1, 1, (L - 15) / 13); roof.rotateY(Math.PI / 2); b.mesh(roof, m.lead, 7.5, 38, 0);
+  b.box(14, 33, 48, m.stone, 14, 0, 0); const tr = new THREE.ConeGeometry(9.3, 10, 4, 1); tr.rotateY(Math.PI / 4); tr.scale(1, 1, 48 / 13); b.mesh(tr, m.lead, 14, 38, 0);
+  for (const s of [-1, 1]) { const rr = new THREE.Mesh(new THREE.CircleGeometry(4.2, 32), m.rose); rr.position.set(14, 24, s * 24.05); if (s < 0) rr.rotation.y = Math.PI; b.g.add(rr); }
+  const apse = new THREE.CylinderGeometry(6.5, 6.5, 33, 20, 1, false, 0, Math.PI); b.mesh(apse, m.stone, L / 2 - 1, 16.5, 0, 0);
+  // flying buttresses along both flanks
+  for (let i = 0; i < 12; i++) for (const s of [-1, 1]) { const x = -40 + i * 8.5; b.box(1.6, 22, 1.6, m.stonePlain, x, 0, s * 19, false); const fb = b.mesh(new THREE.BoxGeometry(0.9, 11, 1.1), m.stonePlain, x, 26, s * 12.5); fb.rotation.x = s * 0.95; b.cone(0.6, 4, m.stonePlain, x, 22, s * 19, 6, 0); }
+  // the spire over the crossing, rebuilt as Viollet-le-Duc designed it
+  b.cyl(2.6, 2.6, 8, m.lead, 14, 43, 0, 8, false); b.cone(2.6, 45, m.lead, 14, 51, 0, 8, 0); b.sphere(0.5, m.gold, 14, 96.5, 0);
+  b.box(140, 0.12, 60, new THREE.MeshStandardMaterial({ color: 0xb3aa98, roughness: 0.95 }), -20, -0.08, 0, false);
+  return b;
+}
+
+// a stretch of the wall near Badaling, laid along the real ground: sloped walkway, battlements, beacon towers
+function greatWall(I) {
+  const b = new B(), m = MAT(), y0 = Geo.height(I.x, I.z), parts = [], crens = [], towers = [];
+  const pts = []; let x = 0, z = 0, a = 0.9; const rnd = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+  for (let i = 0; i < 150; i++) { pts.push([x, z, Geo.height(I.x + x, I.z + z) - y0]); a += (rnd() - 0.5) * 0.35 + Math.sin(i * 0.07) * 0.06; x += Math.sin(a) * 7; z += Math.cos(a) * 7; }
+  // centre the stretch on the landmark's own position, then lay it on the ground
+  const mid = pts[pts.length >> 1]; for (const q of pts) { q[0] -= mid[0]; q[1] -= mid[1]; q[2] = Geo.height(I.x + q[0], I.z + q[1]) - y0; }
+  const Wd = 6.5, Hh = 7.5, M4 = new THREE.Matrix4();
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x0, z0, g0] = pts[i], [x1, z1, g1] = pts[i + 1], dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz), nx = -dz / len * Wd / 2, nz = dx / len * Wd / 2;
+    // a sloped prism: top follows the ground +Hh, bottom sinks well into the hill
+    const v = [[x0 - nx, g0 - 6, z0 - nz], [x0 + nx, g0 - 6, z0 + nz], [x1 + nx, g1 - 6, z1 + nz], [x1 - nx, g1 - 6, z1 - nz], [x0 - nx, g0 + Hh, z0 - nz], [x0 + nx, g0 + Hh, z0 + nz], [x1 + nx, g1 + Hh, z1 + nz], [x1 - nx, g1 + Hh, z1 - nz]];
+    const F = [[4, 5, 6, 7], [0, 3, 2, 1], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]], P = [], U = [];
+    for (const f of F) { const q = [v[f[0]], v[f[1]], v[f[2]], v[f[3]]]; for (const k of [0, 1, 2, 0, 2, 3]) P.push(...q[k]); U.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U.map((u, k) => k % 2 ? u * (Hh + 6) / 4 : u * len / 4), 2)); g.computeVertexNormals(); parts.push(g);
+    const ry = Math.atan2(dx, dz); b.solids.push([(x0 + x1) / 2, (z0 + z1) / 2, Wd, len + 0.4, Math.min(g0, g1) - 6, (g0 + g1) / 2 + Hh, ry]);
+    // battlements on the outer side, a low parapet on the inner
+    for (let k = 0; k < len; k += 2.4) { const f = k / len, cx = x0 + dx * f, cz = z0 + dz * f, cy = g0 + (g1 - g0) * f + Hh; const cg = new THREE.BoxGeometry(0.6, 1.6, 1.3); M4.makeRotationY(ry).setPosition(cx + nx * 0.92, cy + 0.8, cz + nz * 0.92); cg.applyMatrix4(M4); crens.push(cg.toNonIndexed()); }
+    const pg = new THREE.BoxGeometry(0.5, 0.9, len); M4.makeRotationY(ry).setPosition((x0 + x1) / 2 - nx * 0.92, (g0 + g1) / 2 + Hh + 0.45, (z0 + z1) / 2 - nz * 0.92); pg.applyMatrix4(M4); crens.push(pg.toNonIndexed());
+    if (i % 26 === 13) towers.push([x0, z0, g0, ry]);
+  }
+  b.mesh(mergeGeometries(parts), m.wallBrick); b.mesh(mergeGeometries(crens), m.wallBrick);
+  for (const [tx, tz, tg, ry] of towers) {
+    b.box(11, Hh + 6, 11, m.wallBrick, tx, tg - 4, tz, true, ry);
+    for (let k = 0; k < 4; k++) { const aa = ry + k * Math.PI / 2; for (const o of [-3.5, 0, 3.5]) b.box(1.2, 1.5, 0.6, m.wallBrick, tx + Math.sin(aa) * 5.2 + Math.cos(aa) * o, tg + Hh + 2, tz + Math.cos(aa) * 5.2 - Math.sin(aa) * o, false, aa); }
+    b.box(1.6, 2.6, 0.3, m.dark, tx + Math.sin(ry) * 5.6, tg + Hh - 1, tz + Math.cos(ry) * 5.6, false, ry);
+  }
+  return b;
+}
+
 // ---------- placement ----------
 let cacheKey = null, inst = [];
 function instances() {
@@ -259,7 +479,7 @@ function instances() {
   return inst;
 }
 function solidsFor(I, y0) {
-  const b = I.built || (I.built = I.d.build()), cs = Math.cos(I.rot), sn = Math.sin(I.rot), out = [];
+  const b = I.built || (I.built = I.d.build(I)), cs = Math.cos(I.rot), sn = Math.sin(I.rot), out = [];
   for (const [lx, lz, w, d, y1, y2, ry] of b.solids) {
     const cx = I.x + lx * cs + lz * sn, cz = I.z - lx * sn + lz * cs, r = ry + I.rot, c2 = Math.cos(r), s2 = Math.sin(r), ring = new Float32Array(8);
     [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].forEach(([a, bb], i) => { ring[i * 2] = cx + a * c2 + bb * s2; ring[i * 2 + 1] = cz - a * s2 + bb * c2; });
@@ -276,7 +496,7 @@ export const Landmarks = {
       // align with the real road across it where there is one (Tower Bridge)
       if (I.d.road && City.active && !I.aligned) { const R = City.active.r; let best = null, bd = 1e9; for (let e = 0; e < R.E; e++) { if (!City.active.names[R.name[e]].startsWith(I.d.road)) continue; const j = R.ps[e], dx = R.v[j * 2] - I.x, dz = R.v[j * 2 + 1] - I.z, dd = dx * dx + dz * dz; if (dd < bd && R.ps[e + 1] - j > 1) { bd = dd; best = [R.v[j * 2 + 2] - R.v[j * 2], R.v[j * 2 + 3] - R.v[j * 2 + 1]]; } } if (best && bd < 300 * 300) I.rot = Math.atan2(best[0], best[1]); I.aligned = true; }
       const y = City.inside(I.x, I.z) ? BASE : Math.max(0.2, Geo.height(I.x, I.z));
-      out.push({ name: I.d.name, x: I.x, z: I.z, solids: solidsFor(I, y), build: () => { const b = I.built || (I.built = I.d.build()); b.g.position.set(I.x, y, I.z); b.g.rotation.y = I.rot; b.g.userData.inst = I; live.add(b.g); return b.g; } });
+      out.push({ name: I.d.name, x: I.x, z: I.z, solids: solidsFor(I, y), build: () => { const b = I.built || (I.built = I.d.build(I)); b.g.position.set(I.x, y, I.z); b.g.rotation.y = I.rot; b.g.userData.inst = I; live.add(b.g); return b.g; } });
     }
     return out;
   },
@@ -300,6 +520,7 @@ export const Landmarks = {
       if (u.flag) { const t = G.time; u.flag.rotation.y = Math.sin(t * 1.3) * 0.25; }
     }
     clockAcc += dt; if (clockAcc > 20 && clockT) { clockAcc = 0; drawClock(); }
+    if (mats.deco) { const n = G.sky ? G.sky.night : 0; mats.deco.emissiveIntensity = n * 1.1; mats.decoTop.emissiveIntensity = n * 1.6; mats.rose.emissiveIntensity = n * 1.2; }
     if (mats.clock) mats.clock.emissiveIntensity = 0.05 + (G.sky ? G.sky.night : 0) * 2.6;
   },
 };

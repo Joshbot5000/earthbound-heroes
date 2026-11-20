@@ -45,6 +45,24 @@ export class World {
     this.collected = new Set(); try { this.collected = new Set(JSON.parse(localStorage.getItem('eh.orbs') || '[]')); } catch (e) { }
     const detail = canvasTex(256, (x, S) => { x.fillStyle = '#b8b8b8'; x.fillRect(0, 0, S, S); speckle(x, S, 9000, 0.16); });
     this.matRural = new THREE.MeshStandardMaterial({ vertexColors: true, map: detail, roughness: 0.95, metalness: 0 });
+    // countryside ground: world-space detail at two scales (no visible tiling), grass clumps on the flat and
+    // layered rock on steep slopes, so open land reads as terrain rather than flat paint
+    const grassD = canvasTex(256, (x, S) => { x.fillStyle = '#808080'; x.fillRect(0, 0, S, S); for (let i = 0; i < 2600; i++) { const v = 90 + Math.random() * 90 | 0, px = Math.random() * S, py = Math.random() * S; x.strokeStyle = `rgba(${v},${v},${v},0.7)`; x.lineWidth = 1 + Math.random(); x.beginPath(); x.moveTo(px, py); x.lineTo(px + (Math.random() - 0.5) * 4, py - 3 - Math.random() * 6); x.stroke(); } speckle(x, S, 4000, 0.2); }, false);
+    const macro = canvasTex(256, (x, S) => { x.fillStyle = '#808080'; x.fillRect(0, 0, S, S); for (let i = 0; i < 220; i++) { const px = Math.random() * S, py = Math.random() * S, r = 8 + Math.random() * 40, v = Math.random() < 0.5 ? '40,40,40' : '210,210,210', g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, `rgba(${v},0.22)`); g.addColorStop(1, `rgba(${v},0)`); x.fillStyle = g; x.fillRect(px - r, py - r, r * 2, r * 2); } }, false);
+    const rockD = canvasTex(256, (x, S) => { x.fillStyle = '#7a7a7a'; x.fillRect(0, 0, S, S); for (let j = 0; j < 40; j++) { const y = Math.random() * S, v = 70 + Math.random() * 100 | 0; x.fillStyle = `rgba(${v},${v},${v},0.55)`; x.beginPath(); x.moveTo(0, y); for (let i = 0; i <= 8; i++) x.lineTo(i * S / 8, y + (Math.random() - 0.5) * 10); x.lineTo(S, y + 4 + Math.random() * 8); x.lineTo(0, y + 6); x.fill(); } speckle(x, S, 6000, 0.25); }, false);
+    this.matRural.onBeforeCompile = sh => {
+      sh.uniforms.tG = { value: grassD }; sh.uniforms.tM = { value: macro }; sh.uniforms.tR = { value: rockD };
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; varying vec3 vWN;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix) * objectNormal);');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D tG, tM, tR; varying vec3 vWP; varying vec3 vWN;').replace('#include <map_fragment>', `
+        { float slope = 1.0 - smoothstep(0.62, 0.86, abs(vWN.y)); float dist = length(vWP - cameraPosition);
+          float near = 1.0 - smoothstep(60.0, 260.0, dist);
+          vec3 g = texture2D(tG, vWP.xz * 0.21).rgb * 0.6 + texture2D(tG, vWP.xz * 0.043).rgb * 0.4;
+          vec3 mac = texture2D(tM, vWP.xz * 0.0021).rgb * 0.6 + texture2D(tM, vWP.xz * 0.00043).rgb * 0.4;
+          vec3 wn = abs(vWN); vec3 r = texture2D(tR, vec2(vWP.x, vWP.y) * 0.06).rgb * wn.z + texture2D(tR, vec2(vWP.z, vWP.y) * 0.06).rgb * wn.x + texture2D(tR, vWP.xz * 0.06).rgb * wn.y;
+          vec3 det = mix(mix(vec3(0.5), g, near), r, slope);
+          diffuseColor.rgb *= det * 2.0 * (mac * 2.0);
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.74, 0.7) * 1.15, slope * 0.8); }`);
+    };
     this.matFar = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
     this.T = makeFacadeTextures(); this.facades = {}; this.grids = {}; this.cityMats = null;
     this.orbMat = new THREE.MeshBasicMaterial({ color: 0x66f6ff }); this.orbGeo = new THREE.OctahedronGeometry(0.9, 0);

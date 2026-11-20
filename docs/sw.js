@@ -1,5 +1,5 @@
 // Offline support: the game, its data and every real city are cached on first visit.
-const CACHE = "earthbound-mwo4j3zv";
+const CACHE = "earthbound-mwp7z1r9";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "cities/dubai.bin.gz", "cities/london.bin.gz", "cities/mumbai.bin.gz", "cities/newyork.bin.gz", "cities/paris.bin.gz", "cities/sydney.bin.gz", "cities/tokyo.bin.gz"];
 self.addEventListener("install", e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== CACHE && x.startsWith("earthbound")).map(x => caches.delete(x)))).then(() => self.clients.claim())));
