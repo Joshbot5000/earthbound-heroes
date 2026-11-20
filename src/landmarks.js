@@ -477,21 +477,24 @@ function greatWall(I) {
 // Parts that animate (the London Eye wheel, flags, windmill sails) are left alone.
 // weathering for every landmark surface: large-scale colour variation, rain streaks running down walls and
 // darker, damper stone near the ground, all in world space so nothing tiles and no textures are needed
-const weathered = new WeakSet();
+const weathered = new WeakSet(), FLOOD = { value: 0 };
 function weather(m) {
   if (!m || weathered.has(m) || !m.isMeshStandardMaterial || m.transparent || m.blending !== THREE.NormalBlending) return; weathered.add(m);
   const prev = m.onBeforeCompile;
-  m.onBeforeCompile = (sh, r) => { prev && prev.call(m, sh, r);
+  const flood = !m.vertexColors;
+  m.onBeforeCompile = (sh, r) => { prev && prev.call(m, sh, r); sh.uniforms.uFlood = FLOOD;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLW; varying float vLY;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvLW = (modelMatrix * vec4(transformed, 1.0)).xyz; vLY = vLW.y - modelMatrix[3].y;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-      varying vec3 vLW; varying float vLY; float wh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      uniform float uFlood; varying vec3 vLW; varying float vLY; float wh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float wn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(wh(i), wh(i + vec2(1, 0)), f.x), mix(wh(i + vec2(0, 1)), wh(i + vec2(1, 1)), f.x), f.y); }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
       { float big = wn(vLW.xz * 0.04 + vLW.y * 0.02) * 0.6 + wn(vLW.xz * 0.15 + vLW.y * 0.1) * 0.4;
         float streak = wn(vec2((vLW.x + vLW.z) * 1.7, vLW.y * 0.06)) * smoothstep(0.2, 0.9, wn(vec2((vLW.x - vLW.z) * 0.35, vLW.y * 0.02)));
         float base = 1.0 - smoothstep(0.0, 4.0, vLY);
         diffuseColor.rgb *= (0.9 + big * 0.2) * (1.0 - streak * 0.16);
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.72, 0.7, 0.66), base * 0.5); }`);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.72, 0.7, 0.66), base * 0.5); }`)
+      // floodlighting at night: warm light washing up the walls from the ground, fading with height
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + (flood ? 'totalEmissiveRadiance += diffuseColor.rgb * uFlood * (0.12 + 0.6 * (1.0 - smoothstep(0.0, 90.0, vLY))) * vec3(1.0, 0.84, 0.62) * (0.7 + 0.3 * abs(normal.y < 0.5 ? 1.0 : 0.4));' : ''));
   };
   const k = m.customProgramCacheKey ? m.customProgramCacheKey.bind(m) : () => '';
   m.customProgramCacheKey = () => k() + '|lmw';
@@ -570,6 +573,7 @@ export const Landmarks = {
       if (u.flag) { const t = G.time; u.flag.rotation.y = Math.sin(t * 1.3) * 0.25; }
     }
     clockAcc += dt; if (clockAcc > 20 && clockT) { clockAcc = 0; drawClock(); }
+    FLOOD.value = G.sky ? Math.max(0, G.sky.night - 0.25) * 1.3 : 0;
     if (mats.deco) { const n = G.sky ? G.sky.night : 0; mats.deco.emissiveIntensity = n * 1.1; mats.decoTop.emissiveIntensity = n * 1.6; mats.rose.emissiveIntensity = n * 1.2; }
     if (mats.clock) mats.clock.emissiveIntensity = 0.05 + (G.sky ? G.sky.night : 0) * 2.6;
   },

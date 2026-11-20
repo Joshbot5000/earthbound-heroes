@@ -44,7 +44,9 @@ async function boot() {
   await Geo.load();
   const canvas = $('c'), renderer = new THREE.WebGLRenderer({ canvas, antialias: !q.bloom, powerPreference: 'high-performance' });
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  let scale = 1; const baseDpr = Math.min(devicePixelRatio || 1, q.dpr); renderer.setPixelRatio(baseDpr);
+  let scale = 1, pendingResize = false; const baseDpr = Math.min(devicePixelRatio || 1, q.dpr); renderer.setPixelRatio(baseDpr);
+  canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); G.ctxLost = true; }, false);
+  canvas.addEventListener('webglcontextrestored', () => { location.reload(); }, false);
   const scene = G.scene = new THREE.Scene(), camera = G.camera = new THREE.PerspectiveCamera(62, 1, 0.25, 60000);
   let composer = null, bloom = null;
   if (q.bloom) {
@@ -56,14 +58,17 @@ async function boot() {
       Object.assign(ao.configuration, { aoRadius: 3.5, distanceFalloff: 1.2, intensity: 2.2, halfRes: true, depthAwareUpsampling: true, gammaCorrection: false });
       composer.addPass(ao); G.aoPass = ao;
     } else composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } }, vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0); gl_FragColor = vec4(min(c.rgb, vec3(48.0)), c.a); }' }));
     bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.35, 0.6, 0.92); composer.addPass(bloom); composer.addPass(new OutputPass());
     // gentle grade: lift shadows a touch, warm highlights, vignette
     composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null }, uV: { value: 0.32 } }, vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: 'uniform sampler2D tDiffuse; uniform float uV; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); vec2 d = vUv - 0.5; float v = 1.0 - uV * dot(d, d) * 2.2; vec3 g = c.rgb * v; g = mix(g, g * vec3(1.03, 1.0, 0.96), smoothstep(0.4, 1.0, dot(g, vec3(0.33)))); float l = dot(g, vec3(0.2126, 0.7152, 0.0722)); g = mix(vec3(l), g, 1.12); g = clamp((g - 0.5) * 1.07 + 0.5 - 0.012, 0.0, 1.0); gl_FragColor = vec4(g, c.a); }' }));
     if (!q.msaa || q.ao) composer.addPass(new FXAAPass());   // smooth jagged edges where hardware multisampling is off
   }
+  if (qs.get('debug')) G.forceResize = () => { pendingResize = true; };
   const resize = () => { const w = innerWidth, h = innerHeight; renderer.setPixelRatio(baseDpr * scale); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); if (composer) { composer.setPixelRatio(baseDpr * scale); composer.setSize(w, h); } };
-  addEventListener('resize', resize); addEventListener('orientationchange', () => setTimeout(resize, 200));
+  addEventListener('resize', () => { pendingResize = true; }); addEventListener('orientationchange', () => setTimeout(() => { pendingResize = true; }, 200));
 
   G.audio = new Audio(); G.fx = new FX(scene); G.vfx = new VFX(scene); G.renderer = renderer; G.sky = new SkySystem(scene, renderer, mobile); G.world = new World(scene, q);
   G.props = new Props(scene, q); G.ents = new Ents(q); G.wanted = new Wanted(); G.ui = new UI(); G.player = new Player(HEROES); G.powers = new Powers(); G.weapons = new Weapons(); G.weapons.select(0);
@@ -122,10 +127,11 @@ async function boot() {
   setState('title'); if (qs.get('autostart')) start();
   $('loading').style.opacity = 0; setTimeout(() => $('loading').style.display = 'none', 500);
 
-  let last = performance.now(), acc = 0, frames = 0;
+  let last = performance.now(), acc = 0, frames = 0, dynT = 0, lowN = 0, highN = 0;
   function frame(now) {
     requestAnimationFrame(frame);
     const raw = (now - last) / 1000; last = now; const dt = Math.min(0.05, raw);
+    if (pendingResize) { pendingResize = false; resize(); }
     if (G.state === 'map') { G.ui.map.render(renderer); return; }
     G.realTime = (G.realTime || 0) + raw;
     if (G.state === 'lmap') { G.ui.drawLocal(); return; }
@@ -140,7 +146,14 @@ async function boot() {
     if (composer) composer.render(); else renderer.render(scene, camera);
     // dynamic resolution keeps the frame rate up on slower devices
     acc += raw; frames++;
-    if (acc > 1.5) { const fps = frames / acc; acc = 0; frames = 0; G.fps = fps; const ns = clamp(scale * (fps < 42 ? 0.88 : fps > 56 ? 1.06 : 1), 0.5, 1); if (Math.abs(ns - scale) > 0.02 && !qs.get('fixed')) { scale = ns; resize(); } }
+    // dynamic resolution, with hysteresis: drop quickly when the frame rate is clearly low, climb back only when it
+    // has been comfortably high for a while, and never more than once every few seconds. The resize itself is applied
+    // at the START of the next frame, before anything is drawn - resizing after drawing blanks the canvas (black flash)
+    if (acc > 1.5) { const fps = frames / acc; acc = 0; frames = 0; G.fps = fps; dynT += 1.5;
+      lowN = fps < 38 ? lowN + 1 : 0; highN = fps > 57 ? highN + 1 : 0;
+      let ns = scale; if (lowN >= 2) ns = scale * 0.85; else if (highN >= 4) ns = scale * 1.08;
+      ns = Math.round(clamp(ns, 0.55, 1) * 20) / 20;
+      if (ns !== scale && dynT > 6 && !qs.get('fixed')) { scale = ns; dynT = 0; lowN = highN = 0; pendingResize = true; } }
   }
   requestAnimationFrame(frame);
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { });
