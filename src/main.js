@@ -34,7 +34,7 @@ const mobile = isTouch();
 let qName = 'Auto'; try { qName = localStorage.getItem('eh.q') || 'Auto'; } catch (e) { }
 if (qs.get('q')) qName = qs.get('q');
 const q = PRESETS[qName] || (mobile ? PRESETS.Medium : PRESETS.High);
-if (qs.get('debug')) { window.G = G; window.THREE = { Raycaster: THREE.Raycaster }; window.City = City; window.Landmarks = Landmarks; }
+if (qs.get('debug')) { window.G = G; window.THREE = { Raycaster: THREE.Raycaster, Box3: THREE.Box3, Vector3: THREE.Vector3 }; window.City = City; window.Landmarks = Landmarks; window.Geo = Geo; }
 G.qName = qName; G.time = 0; G.state = 'boot'; G.shake = 0;
 G.stats = { renown: 0, defeated: 0, orbs: 0, infected: 0, crews: 0 };
 let save = {}; try { save = JSON.parse(localStorage.getItem('eh.save') || '{}'); } catch (e) { }
@@ -59,7 +59,7 @@ async function boot() {
     bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.35, 0.6, 0.92); composer.addPass(bloom); composer.addPass(new OutputPass());
     // gentle grade: lift shadows a touch, warm highlights, vignette
     composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null }, uV: { value: 0.32 } }, vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'uniform sampler2D tDiffuse; uniform float uV; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); vec2 d = vUv - 0.5; float v = 1.0 - uV * dot(d, d) * 2.2; vec3 g = c.rgb * v; g = mix(g, g * vec3(1.03, 1.0, 0.96), smoothstep(0.4, 1.0, dot(g, vec3(0.33)))); gl_FragColor = vec4(g, c.a); }' }));
+      fragmentShader: 'uniform sampler2D tDiffuse; uniform float uV; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); vec2 d = vUv - 0.5; float v = 1.0 - uV * dot(d, d) * 2.2; vec3 g = c.rgb * v; g = mix(g, g * vec3(1.03, 1.0, 0.96), smoothstep(0.4, 1.0, dot(g, vec3(0.33)))); float l = dot(g, vec3(0.2126, 0.7152, 0.0722)); g = mix(vec3(l), g, 1.12); g = clamp((g - 0.5) * 1.07 + 0.5 - 0.012, 0.0, 1.0); gl_FragColor = vec4(g, c.a); }' }));
     if (!q.msaa || q.ao) composer.addPass(new FXAAPass());   // smooth jagged edges where hardware multisampling is off
   }
   const resize = () => { const w = innerWidth, h = innerHeight; renderer.setPixelRatio(baseDpr * scale); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); if (composer) { composer.setPixelRatio(baseDpr * scale); composer.setSize(w, h); } };
@@ -100,9 +100,11 @@ async function boot() {
       persist(); $('loading').style.opacity = 0; setTimeout(() => $('loading').style.display = 'none', 500);
     }, 60);
   };
-  const setState = s => { G.state = s; $('hud').classList.toggle('on', s === 'play'); $('title').classList.toggle('on', s === 'title'); $('mapScreen').classList.toggle('on', s === 'map'); $('pause').classList.toggle('on', s === 'pause'); $('arsenal').classList.toggle('on', s === 'arsenal'); if (s !== 'play' && document.pointerLockElement) document.exitPointerLock(); };
+  const setState = s => { G.state = s; $('hud').classList.toggle('on', s === 'play'); $('title').classList.toggle('on', s === 'title'); $('mapScreen').classList.toggle('on', s === 'map'); $('pause').classList.toggle('on', s === 'pause'); $('lmap').classList.toggle('on', s === 'lmap'); $('arsenal').classList.toggle('on', s === 'arsenal'); if (s !== 'play' && document.pointerLockElement) document.exitPointerLock(); };
   G.setState = setState;
   G.openMap = () => { G.ui.map.open(Geo.toLat(G.player.pos.z), Geo.toLon(G.player.pos.x)); setState('map'); };
+  G.openLocal = () => { G.ui.openLocal(); setState('lmap'); };
+  G.closeLocal = () => setState('play');
   G.closeMap = () => { G.audio.start(); setState('play'); };
   G.setPause = on => { if (on) $('stats').textContent = `Renown ${G.stats.renown} · Crews cleared ${G.stats.crews} · Defeated ${G.stats.defeated} · Shards ${G.stats.orbs} · Infected ${G.stats.infected}`; setState(on ? 'pause' : 'play'); };
   const persist = () => { try { localStorage.setItem('eh.save', JSON.stringify({ lat: Geo.toLat(G.player.pos.z), lon: Geo.toLon(G.player.pos.x), hero: G.player.heroIndex, stats: G.stats })); } catch (e) { } };
@@ -125,6 +127,8 @@ async function boot() {
     requestAnimationFrame(frame);
     const raw = (now - last) / 1000; last = now; const dt = Math.min(0.05, raw);
     if (G.state === 'map') { G.ui.map.render(renderer); return; }
+    G.realTime = (G.realTime || 0) + raw;
+    if (G.state === 'lmap') { G.ui.drawLocal(); return; }
     if (G.state === 'pause' || G.state === 'arsenal') return;
     G.time += dt; const I = G.input; G.ui.poll();
     if (G.state === 'title') { I.mx = I.my = 0; I.lookX = dt * 0.12; I.lookY = (0.12 - G.player.camPitch) * dt; for (const k in I.hit) I.hit[k] = false; }

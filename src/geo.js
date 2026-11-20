@@ -117,13 +117,40 @@ export const Geo = {
   rawHeight(x, z) {
     const lat = this.toLat(z), lon = this.toLon(x);
     const shore = (this.land(lat, lon) - 0.5) * 2;
-    if (shore < 0) return Math.max(shore * 70, -60);
-    const u = this.urban(x, z), e = this.elev(lat, lon), inl = smooth(0, 0.45, shore);
-    const ax = this.ox * CH + x, az = this.oz * CH + z;
-    const amp = (10 + e * 1100) * (1 - 0.94 * smooth(0.05, 0.3, u));
-    const hills = (fbm(ax / 1100, az / 1100, 5) - 0.47) * 2 * amp + (fbm(ax / 90, az / 90, 2) - 0.5) * 5 * (1 - u);
-    const h = shore * 9 + (e * 5200 + hills) * inl;
-    return Math.max(h, Math.min(shore * 30, 0.5 + shore * 2.5));
+    let h;
+    if (shore < 0) h = Math.max(shore * 70, -60);
+    else {
+      const u = this.urban(x, z), e = this.elev(lat, lon), inl = smooth(0, 0.45, shore);
+      const ax = this.ox * CH + x, az = this.oz * CH + z;
+      const amp = (10 + e * 1100) * (1 - 0.94 * smooth(0.05, 0.3, u));
+      const hills = (fbm(ax / 1100, az / 1100, 5) - 0.47) * 2 * amp + (fbm(ax / 90, az / 90, 2) - 0.5) * 5 * (1 - u);
+      h = shore * 9 + (e * 5200 + hills) * inl;
+      h = Math.max(h, Math.min(shore * 30, 0.5 + shore * 2.5));
+    }
+    // landmark terrain: famous mountains raised to their real summits, and land under landmarks the coarse
+    // world map puts in the water (Istanbul's old city, for one)
+    const F = this.featLocal(); for (let i = 0; i < F.length; i++) { const f = F[i], dx = x - f.x, dz = z - f.z, d2 = dx * dx + dz * dz; if (d2 >= f.r * f.r) continue; const t = Math.sqrt(d2) / f.r;
+      if (f.pad) h = Math.max(h, f.pad + (h - f.pad) * smooth(0.55, 1, t));
+      else h += f.add * profile(f.shape, t, dx / f.r, dz / f.r); }
+    return h;
+  },
+  // features are given in lat/lon; convert them to the local frame once per origin
+  features: [],
+  featLocal() {
+    const k = this.ox + ',' + this.oz + ',' + this.band; if (this._fk === k) return this._f;
+    this._fk = k; this._f = [];
+    for (const f of this.features) { const x = f.lon * M * this.cosB - this.ox * CH, z = -f.lat * M - this.oz * CH; if (Math.abs(x) > 90000 + f.r || Math.abs(z) > 90000 + f.r) continue; this._f.push({ x, z, r: f.r, shape: f.shape, pad: f.pad, add: 0, h: f.h }); }
+    // a mountain's height is its real summit altitude: add only what the base terrain lacks
+    const list = this._f; this._f = list.filter(f => f.pad); for (const f of list) if (!f.pad) { const base = this.rawHeight(f.x, f.z); f.add = Math.max(0, f.h - base); }
+    this._f = list; return list;
   },
 };
 const ucache = new Map();
+// mountain shapes over t = 0 (summit) .. 1 (foot); u, v = offsets in units of the radius
+function profile(shape, t, u, v) {
+  if (shape === 'strato') { let p = Math.pow(1 - t, 2.1); if (t < 0.035) p -= 0.012 * (1 - t / 0.035); return p; }      // Fuji: long concave slopes, a crater
+  if (shape === 'horn') { const a = Math.abs(u * 0.8 + v * 0.6), b = Math.abs(u * 0.6 - v * 0.8), q = (a + b) * 0.85; return Math.pow(Math.max(0, 1 - q), 1.25) * smooth(1, 0.75, t); }   // Matterhorn: four ridges to a point
+  if (shape === 'mesa') return 0.78 * smooth(1, 0.8, t) + 0.22 * (1 - t);                                                 // Table Mountain: flat top, cliffs, scree
+  if (shape === 'dome') return Math.pow(Math.max(0, 1 - t * t), 0.7);                                                     // Sugarloaf, Zuma Rock: bare granite domes
+  return Math.pow(1 - t * t, 2);                                                                                          // a rounded hill
+}

@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { G } from './util.js';
 import { Geo, CH } from './geo.js';
 import { City, BASE } from './city.js';
+import { moreLandmarks } from './landmarks2.js';
 
 const M = 111320;
 const mats = {};
@@ -154,7 +155,7 @@ export const LANDMARKS = [
   { name: 'Pyramid of Menkaure', lat: 29.97250, lon: 31.12833, hide: 0, build: () => pyramid(103, 65) },
   { name: 'Colosseum', lat: 41.89021, lon: 12.49223, hide: 90, build: colosseum },
   { name: 'Tokyo Tower', lat: 35.65858, lon: 139.74543, hide: 40, build: () => latticeTower(80, 333, [[125, 0.35], [223, 0.18]], 0xd8452a) },
-  { name: 'CN Tower', lat: 43.64257, lon: -79.38706, hide: 30, build: () => { const b = new B(), m = MAT(); b.lathe([[14, 0], [8, 60], [5.5, 330], [0.01, 330]], m.concrete, 0, 0, 0, 3); b.lathe([[0.01, 330], [18, 336], [21, 346], [16, 356], [0.01, 358]], m.concrete, 0, 0, 0, 24); b.cyl(2, 0.4, 195, m.white, 0, 358, 0, 8, false); b.solids.push([0, 0, 20, 20, 0, 330, 0], [0, 0, 36, 36, 330, 358, 0]); return b; } },
+  { name: 'CN Tower', lat: 43.64257, lon: -79.38706, hide: 30, pad: { r: 600, h: 78 }, build: () => { const b = new B(), m = MAT(); b.lathe([[14, 0], [8, 60], [5.5, 330], [0.01, 330]], m.concrete, 0, 0, 0, 3); b.lathe([[0.01, 330], [18, 336], [21, 346], [16, 356], [0.01, 358]], m.concrete, 0, 0, 0, 24); b.cyl(2, 0.4, 195, m.white, 0, 358, 0, 8, false); b.solids.push([0, 0, 20, 20, 0, 330, 0], [0, 0, 36, 36, 330, 358, 0]); return b; } },
   { name: 'Space Needle', lat: 47.62051, lon: -122.34931, hide: 25, build: () => { const b = new B(), m = MAT(); for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; b.lathe([[1.2, 0], [0.9, 80], [1.0, 150]], m.white, Math.cos(a) * 10, 0, Math.sin(a) * 10, 8); } b.cyl(3, 3, 150, m.white, 0, 0, 0, 12); b.lathe([[0.01, 150], [18, 152], [22, 158], [6, 162], [0.01, 163]], m.white, 0, 0, 0, 32); b.cyl(0.6, 0.2, 22, m.white, 0, 163, 0, 8, false); b.solids.push([0, 0, 40, 40, 150, 162, 0]); return b; } },
   { name: 'Golden Gate Bridge (south tower)', lat: 37.81077, lon: -122.47714, hide: 0, build: () => ggTower() },
   { name: 'Golden Gate Bridge (north tower)', lat: 37.82645, lon: -122.47924, hide: 0, build: () => ggTower() },
@@ -173,6 +174,11 @@ export const LANDMARKS = [
   { name: 'Sydney Harbour Bridge', lat: -33.85224, lon: 151.21082, hide: 40, rot: 0.33, build: harbourBridge },
   { name: 'Notre-Dame de Paris', lat: 48.85297, lon: 2.34989, hide: 50, rot: 0.33, build: notreDame },
 ];
+
+// the rest of the catalogue, built from shared parametric pieces
+LANDMARKS.push(...moreLandmarks({ B, MAT, canvas, onion, dome, pediment, archFill, column, pyramid }));
+// mountains live in the terrain itself (so they stand on the horizon, and you can climb them); pads give land to landmarks the coarse world map leaves in the water
+for (const d of LANDMARKS) { if (d.terrain) Geo.features.push({ lat: d.lat, lon: d.lon, ...d.terrain }); if (d.pad) Geo.features.push({ lat: d.lat, lon: d.lon, r: d.pad.r, pad: d.pad.h }); }
 
 function spiralTex() { return canvas(256, 256, (x, w, h) => { x.fillStyle = '#5a7a8a'; x.fillRect(0, 0, w, h); x.strokeStyle = 'rgba(20,30,40,0.9)'; x.lineWidth = 10; for (let i = -4; i < 8; i++) { x.beginPath(); x.moveTo(i * 64, 0); x.lineTo(i * 64 + 128, h); x.stroke(); } x.strokeStyle = 'rgba(255,255,255,0.15)'; x.lineWidth = 1; for (let i = 0; i < w; i += 12) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, h); x.stroke(); x.beginPath(); x.moveTo(0, i); x.lineTo(w, i); x.stroke(); } }); }
 function londonEye() {
@@ -467,6 +473,47 @@ function greatWall(I) {
 }
 
 // ---------- placement ----------
+// build once, then merge the many small parts into one mesh per material: far fewer draw calls on phones.
+// Parts that animate (the London Eye wheel, flags, windmill sails) are left alone.
+// weathering for every landmark surface: large-scale colour variation, rain streaks running down walls and
+// darker, damper stone near the ground, all in world space so nothing tiles and no textures are needed
+const weathered = new WeakSet();
+function weather(m) {
+  if (!m || weathered.has(m) || !m.isMeshStandardMaterial || m.transparent || m.blending !== THREE.NormalBlending) return; weathered.add(m);
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => { prev && prev.call(m, sh, r);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLW; varying float vLY;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvLW = (modelMatrix * vec4(transformed, 1.0)).xyz; vLY = vLW.y - modelMatrix[3].y;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+      varying vec3 vLW; varying float vLY; float wh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float wn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(wh(i), wh(i + vec2(1, 0)), f.x), mix(wh(i + vec2(0, 1)), wh(i + vec2(1, 1)), f.x), f.y); }`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+      { float big = wn(vLW.xz * 0.04 + vLW.y * 0.02) * 0.6 + wn(vLW.xz * 0.15 + vLW.y * 0.1) * 0.4;
+        float streak = wn(vec2((vLW.x + vLW.z) * 1.7, vLW.y * 0.06)) * smoothstep(0.2, 0.9, wn(vec2((vLW.x - vLW.z) * 0.35, vLW.y * 0.02)));
+        float base = 1.0 - smoothstep(0.0, 4.0, vLY);
+        diffuseColor.rgb *= (0.9 + big * 0.2) * (1.0 - streak * 0.16);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.72, 0.7, 0.66), base * 0.5); }`);
+  };
+  const k = m.customProgramCacheKey ? m.customProgramCacheKey.bind(m) : () => '';
+  m.customProgramCacheKey = () => k() + '|lmw';
+  m.needsUpdate = true;
+}
+function built(I) {
+  if (I.built) return I.built; const b = I.built = I.d.build(I), keep = new Set();
+  b.g.traverse(o => { if (o.isMesh) weather(o.material); });
+  for (const v of Object.values(b.g.userData)) if (v && v.isObject3D) v.traverse(o => keep.add(o));
+  for (const o of b.g.children) if (o.isGroup && !o.children.every(c => c.isMesh)) o.traverse(c => keep.add(c));
+  const groups = new Map(); b.g.updateMatrixWorld(true);
+  b.g.traverse(o => { if (!o.isMesh || keep.has(o) || o === b.g) return; const k = o.material.uuid; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(o); });
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    const geos = list.map(o => { let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone(); g.applyMatrix4(o.matrixWorld); for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) g.deleteAttribute(k); if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2)); if (!g.attributes.normal) g.computeVertexNormals(); return g; });
+    const hasCol = geos.some(g => g.attributes.color); if (hasCol && !geos.every(g => g.attributes.color)) continue;
+    let merged; try { merged = mergeGeometries(geos); } catch (e) { merged = null; } if (!merged) continue;
+    const m = new THREE.Mesh(merged, list[0].material); m.castShadow = m.receiveShadow = true;
+    for (const o of list) o.parent.remove(o); b.g.add(m);
+  }
+  return b;
+}
 let cacheKey = null, inst = [];
 function instances() {
   const k = Geo.ox + ',' + Geo.oz + ',' + Geo.band; if (k === cacheKey) return inst;
@@ -479,7 +526,7 @@ function instances() {
   return inst;
 }
 function solidsFor(I, y0) {
-  const b = I.built || (I.built = I.d.build(I)), cs = Math.cos(I.rot), sn = Math.sin(I.rot), out = [];
+  const b = built(I), cs = Math.cos(I.rot), sn = Math.sin(I.rot), out = [];
   for (const [lx, lz, w, d, y1, y2, ry] of b.solids) {
     const cx = I.x + lx * cs + lz * sn, cz = I.z - lx * sn + lz * cs, r = ry + I.rot, c2 = Math.cos(r), s2 = Math.sin(r), ring = new Float32Array(8);
     [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].forEach(([a, bb], i) => { ring[i * 2] = cx + a * c2 + bb * s2; ring[i * 2 + 1] = cz - a * s2 + bb * c2; });
@@ -496,7 +543,7 @@ export const Landmarks = {
       // align with the real road across it where there is one (Tower Bridge)
       if (I.d.road && City.active && !I.aligned) { const R = City.active.r; let best = null, bd = 1e9; for (let e = 0; e < R.E; e++) { if (!City.active.names[R.name[e]].startsWith(I.d.road)) continue; const j = R.ps[e], dx = R.v[j * 2] - I.x, dz = R.v[j * 2 + 1] - I.z, dd = dx * dx + dz * dz; if (dd < bd && R.ps[e + 1] - j > 1) { bd = dd; best = [R.v[j * 2 + 2] - R.v[j * 2], R.v[j * 2 + 3] - R.v[j * 2 + 1]]; } } if (best && bd < 300 * 300) I.rot = Math.atan2(best[0], best[1]); I.aligned = true; }
       const y = City.inside(I.x, I.z) ? BASE : Math.max(0.2, Geo.height(I.x, I.z));
-      out.push({ name: I.d.name, x: I.x, z: I.z, solids: solidsFor(I, y), build: () => { const b = I.built || (I.built = I.d.build(I)); b.g.position.set(I.x, y, I.z); b.g.rotation.y = I.rot; b.g.userData.inst = I; live.add(b.g); return b.g; } });
+      out.push({ name: I.d.name, x: I.x, z: I.z, solids: solidsFor(I, y), build: () => { const b = built(I); b.g.position.set(I.x, y, I.z); b.g.rotation.y = I.rot; b.g.userData.inst = I; live.add(b.g); return b.g; } });
     }
     return out;
   },
@@ -509,14 +556,17 @@ export const Landmarks = {
     }
     return set;
   },
-  clearAt(ch, x, z, r) { for (const I of instances()) { if (Math.abs(I.cx - ch.cx) > 1 || Math.abs(I.cz - ch.cz) > 1) continue; const R = (I.d.hide || 20) + r; if ((x - I.x) ** 2 + (z - I.z) ** 2 < R * R) return true; } return false; },
+  clearAt(ch, x, z, r) { for (const I of instances()) { const span = 1 + Math.ceil((I.d.hide || 20) / CH); if (Math.abs(I.cx - ch.cx) > span || Math.abs(I.cz - ch.cz) > span) continue; const R = (I.d.hide || 20) + r; if ((x - I.x) ** 2 + (z - I.z) ** 2 < R * R) return true; } return false; },
   find(name) { for (const I of instances()) if (I.d.name.startsWith(name)) return { x: I.x, z: I.z, y: City.inside(I.x, I.z) ? BASE : Math.max(0.2, Geo.height(I.x, I.z)) }; return null; },
+  defs: LANDMARKS, _built: built,
+  within(x, z, r) { const out = []; for (const I of instances()) if (Math.abs(I.x - x) < r && Math.abs(I.z - z) < r) out.push({ name: I.d.name, x: I.x, z: I.z }); return out; },
   nearest(x, z, max = 400) { let best = null, bd = max * max; for (const I of instances()) { const d = (I.x - x) ** 2 + (I.z - z) ** 2; if (d < bd) { bd = d; best = I.d.name; } } return best; },
   update(dt) {
     for (const g of live) {
       if (!g.parent) continue;
       const u = g.userData;
       if (u.wheel) { u.wheel.rotation.x += dt * 0.0045 * 60 / 60; for (const p of u.pods) p.rotation.x = -u.wheel.rotation.x; }
+      if (u.glow || u.sail) { const n = G.sky ? G.sky.night : 0; if (u.glow) { u.glow.emissiveIntensity = n * 2.2; u.glow.emissive.setHSL((G.time * 0.05) % 1, 0.8, 0.5); } if (u.sail) u.sail.emissiveIntensity = n * 0.8; }
       if (u.flag) { const t = G.time; u.flag.rotation.y = Math.sin(t * 1.3) * 0.25; }
     }
     clockAcc += dt; if (clockAcc > 20 && clockT) { clockAcc = 0; drawClock(); }

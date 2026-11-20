@@ -14,7 +14,7 @@ const SLOTKEYS = { Digit0: 0, Backquote: 0, Digit1: 1, Digit2: 2, Digit3: 3, Dig
 const HELP = [['Move', 'W A S D · left stick'], ['Look', 'Mouse · drag right side'], ['Jump / double jump', 'Space · JUMP'], ['Sprint', 'Shift · push stick fully'],
   ['Swing / traverse (hold)', 'E · HOLD'], ['Change direction mid-swing', 'Steer hard, or tap E again'], ['Swing jump', 'Space while swinging'], ['Web wings (Vesper)', 'Hold Space while falling'],
   ['Fire', 'Left mouse · FIRE'], ['Aim / scope', 'Right mouse · AIM'], ['Choose weapon', '1–5, 0 fists, scroll · GUN'], ['Reload', 'T (automatic when empty)'], ['Melee', 'V · HIT'], ['Arsenal', 'Tab · hold GUN'],
-  ['Dodge', 'C · DODGE'], ['Powers', 'Q · R · X'], ['Enter / leave car', 'F · CAR'], ['Wall-run / climb', 'Run or jump into a wall and keep pushing'], ['Switch hero', 'Z · ⇄'], ['World map', 'M · 🌍'], ['Pause', 'Esc · Ⅱ']];
+  ['Dodge', 'C · DODGE'], ['Powers', 'Q · R · X'], ['Enter / leave car', 'F · CAR'], ['Wall-run / climb', 'Run or jump into a wall and keep pushing'], ['Switch hero', 'Z · ⇄'], ['World map', 'M · 🌍'], ['Where am I (local map)', 'N · tap the minimap'], ['Pause', 'Esc · Ⅱ']];
 
 export class UI {
   constructor() {
@@ -27,6 +27,7 @@ export class UI {
       if (k) { if (!e.repeat) { this.keys[k] = true; press(k, true); } e.preventDefault(); }
       if (e.repeat) return;
       if (e.code === 'KeyM') G.state === 'map' ? G.closeMap() : G.state === 'play' && G.openMap();
+      if (e.code === 'KeyN' || (e.code === 'Escape' && G.state === 'lmap')) G.state === 'lmap' ? G.closeLocal() : G.state === 'play' && G.openLocal();
       if (e.code === 'KeyZ' && G.state === 'play') G.cycleHero();
       if ((e.code === 'KeyP' || e.code === 'Escape') && (G.state === 'play' || G.state === 'pause')) G.setPause(G.state === 'play');
       else if (e.code === 'Escape' && G.state === 'arsenal') this.closeArsenal();
@@ -65,7 +66,7 @@ export class UI {
     // reliable input there. Buttons keep pointer events. Desktop mice never go through this path.
     this.touchEvents = 'ontouchstart' in window;
     if (this.touchEvents) {
-      const blocked = el => el && el.closest && el.closest('button, input, #arsenal, #pause, #title, #mapScreen');
+      const blocked = el => el && el.closest && el.closest('button, input, #arsenal, #pause, #title, #mapScreen, #lmap, #mini');
       addEventListener('touchstart', e => {
         if (G.state !== 'play') return; let used = false;
         for (const t of e.changedTouches) {
@@ -112,6 +113,7 @@ export class UI {
     $('heroes').innerHTML = HEROES.map((h, i) => `<button class="hero glass" data-i="${i}" style="--c:${h.color}"><b>${h.name}</b><i>${h.title}</i><span>${h.blurb}</span></button>`).join('');
     $('heroes').onclick = e => { const b = e.target.closest('.hero'); if (b) G.setHero(+b.dataset.i); };
     this.mini = $('mini').getContext('2d'); this.map = new GlobeMap();
+    $('mini').style.cursor = 'pointer'; $('mini').addEventListener('pointerup', e => { e.stopPropagation(); if (G.state === 'play') G.openLocal(); });
   }
   setHero(h, i) {
     document.documentElement.style.setProperty('--hero', h.color);
@@ -181,26 +183,57 @@ export class UI {
     $('meta').textContent = `${G.sky.localTime(lon)} local · ${wx.label} ${wx.temp}°C${G.sky.w.live ? '' : ' (est.)'} · ${Math.abs(lat).toFixed(3)}°${lat >= 0 ? 'N' : 'S'} ${Math.abs(lon).toFixed(3)}°${lon >= 0 ? 'E' : 'W'}`;
     this.radar();
   }
-  radar() {
-    const x = this.mini, S = 264, R = 170, k = S / (2 * R), p = G.player, px = p.pos.x, pz = p.pos.z, T = (wx, wz) => [S / 2 + (wx - px) * k, S / 2 + (wz - pz) * k];
-    x.clearRect(0, 0, S, S); x.save(); x.beginPath(); x.arc(S / 2, S / 2, S / 2, 0, 7); x.clip();
-    const ch = G.world.chunkAt(px, pz), urban = ch && ch.urban, real = ch && ch.real; x.fillStyle = Geo.height(px, pz) < 0 ? '#0d2a44' : urban ? '#3b3f47' : '#22301f'; x.fillRect(0, 0, S, S);
+  radar() { const p = G.player; this.paint(this.mini, 264, 264, p.pos.x, p.pos.z, 264 / 340, true); }
+  // draws the area around (cx, cz) at k pixels per metre: water, parks, streets, buildings, people, the player.
+  // round = the HUD minimap (clipped circle, north up, heading cone); else the full-screen local map with labels
+  paint(x, W, H, cx, cz, k, round) {
+    const p = G.player, px = p.pos.x, pz = p.pos.z, Rx = W / 2 / k, Rz = H / 2 / k, R = Math.max(Rx, Rz), T = (wx, wz) => [W / 2 + (wx - cx) * k, H / 2 + (wz - cz) * k];
+    x.clearRect(0, 0, W, H); x.save(); if (round) { x.beginPath(); x.arc(W / 2, H / 2, W / 2, 0, 7); x.clip(); }
+    const real = City.active && City.inside(cx, cz), ch = G.world.chunkAt(cx, cz), urban = ch && ch.urban;
+    x.fillStyle = Geo.height(cx, cz) < 0 ? '#0d2a44' : real || urban ? '#3b3f47' : '#22301f'; x.fillRect(0, 0, W, H);
+    if (!real && !round) { // open land: shade by height so hills and coast read
+      const st = Math.max(6, 10 / k); for (let gz = -Rz; gz < Rz; gz += st) for (let gx = -Rx; gx < Rx; gx += st) { const h = Geo.height(cx + gx, cz + gz); x.fillStyle = h < 0 ? '#0f3352' : `hsl(${100 - Math.min(60, h / 30)},${Math.max(10, 28 - h / 80)}%,${Math.min(40, 16 + h / 60)}%)`; x.fillRect(W / 2 + gx * k, H / 2 + gz * k, st * k + 0.8, st * k + 0.8); } }
     if (real) {
-      // the real map: water, parks, then streets
-      const C = City.active, st = 6; for (let gz = -R; gz < R; gz += st) for (let gx = -R; gx < R; gx += st) { const m = City.maskAt(px + gx, pz + gz); if (m === 1 || m === 6) continue; x.fillStyle = m === 0 ? '#163a5a' : m === 3 ? '#8a7a50' : '#2f5a2a'; x.fillRect(S / 2 + gx * k, S / 2 + gz * k, st * k + 0.6, st * k + 0.6); }
-      const Rr = C.r; x.strokeStyle = '#6a6f78'; x.lineCap = 'round';
-      for (let cx = Math.floor((px - R) / 192); cx <= Math.floor((px + R) / 192); cx++) for (let cz = Math.floor((pz - R) / 192); cz <= Math.floor((pz + R) / 192); cz++) for (const e of C.eHome.get(cx + ',' + cz) || []) { const w = [0, 15, 13, 11.5, 10, 8.5, 7, 6, 4.5, 0, 6, 2.6, 2.6][Rr.cls[e]]; if (!w) continue; x.lineWidth = Math.max(1, w * k); x.beginPath(); for (let j = Rr.ps[e]; j < Rr.ps[e + 1]; j++) { const [a, b] = T(Rr.v[j * 2], Rr.v[j * 2 + 1]); j === Rr.ps[e] ? x.moveTo(a, b) : x.lineTo(a, b); } x.stroke(); }
-    } else if (urban) { x.fillStyle = '#23262c'; for (let gx = Math.floor((px - R) / BLOCK); gx <= Math.ceil((px + R) / BLOCK); gx++) for (let gz = Math.floor((pz - R) / BLOCK); gz <= Math.ceil((pz + R) / BLOCK); gz++) { const [a, b] = T(gx * BLOCK + 7, gz * BLOCK + 7); x.fillRect(a, b, (BLOCK - 14) * k, (BLOCK - 14) * k); } }
-    x.fillStyle = '#8791a3'; G.world.forBoxes(px - R, pz - R, px + R, pz + R, b => { if (b.bridge) return; if (b.rings) { x.beginPath(); for (const r of b.rings) for (let i = 0; i < r.length; i += 2) { const [a, c] = T(r[i], r[i + 1]); i ? x.lineTo(a, c) : x.moveTo(a, c); } x.fill('evenodd'); return; } const [a, c] = T(b.minx, b.minz); x.fillRect(a, c, (b.maxx - b.minx) * k, (b.maxz - b.minz) * k); });
+      const C = City.active, st = Math.max(3, 2.2 / k); for (let gz = -Rz; gz < Rz; gz += st) for (let gx = -Rx; gx < Rx; gx += st) { const m = City.maskAt(cx + gx, cz + gz); if (m === 1 || m === 6) continue; x.fillStyle = m === 0 ? '#163a5a' : m === 3 ? '#8a7a50' : '#2f5a2a'; x.fillRect(W / 2 + gx * k, H / 2 + gz * k, st * k + 0.6, st * k + 0.6); }
+      const Rr = C.r; x.strokeStyle = '#6a6f78'; x.lineCap = 'round'; x.lineJoin = 'round';
+      for (let gx = Math.floor((cx - Rx) / 192); gx <= Math.floor((cx + Rx) / 192); gx++) for (let gz = Math.floor((cz - Rz) / 192); gz <= Math.floor((cz + Rz) / 192); gz++) for (const e of C.eHome.get(gx + ',' + gz) || []) { const w = [0, 15, 13, 11.5, 10, 8.5, 7, 6, 4.5, 0, 6, 2.6, 2.6][Rr.cls[e]]; if (!w) continue; x.lineWidth = Math.max(1, w * k); x.beginPath(); for (let j = Rr.ps[e]; j < Rr.ps[e + 1]; j++) { const [a, b] = T(Rr.v[j * 2], Rr.v[j * 2 + 1]); j === Rr.ps[e] ? x.moveTo(a, b) : x.lineTo(a, b); } x.stroke(); }
+    } else if (urban || (!round && Geo.urban(cx, cz) > 0.2)) { x.fillStyle = '#23262c'; for (let gx = Math.floor((cx - Rx) / BLOCK); gx <= Math.ceil((cx + Rx) / BLOCK); gx++) for (let gz = Math.floor((cz - Rz) / BLOCK); gz <= Math.ceil((cz + Rz) / BLOCK); gz++) { if (!round && Geo.urban(gx * BLOCK, gz * BLOCK) < 0.2) continue; const [a, b] = T(gx * BLOCK + 7, gz * BLOCK + 7); x.fillRect(a, b, (BLOCK - 14) * k, (BLOCK - 14) * k); } }
+    x.fillStyle = '#8791a3'; G.world.forBoxes(cx - Rx, cz - Rz, cx + Rx, cz + Rz, b => { if (b.bridge) return; if (b.rings) { x.beginPath(); for (const r of b.rings) for (let i = 0; i < r.length; i += 2) { const [a, c] = T(r[i], r[i + 1]); i ? x.lineTo(a, c) : x.moveTo(a, c); } x.fill('evenodd'); return; } const [a, c] = T(b.minx, b.minz); x.fillRect(a, c, (b.maxx - b.minx) * k, (b.maxz - b.minz) * k); });
     const dot = (wx, wz, col, r) => { const [a, b] = T(wx, wz); x.fillStyle = col; x.beginPath(); x.arc(a, b, r, 0, 7); x.fill(); };
     for (const c of G.ents.cars) if (!c.dead && c !== p.car) dot(c.pos.x, c.pos.z, c.ai === 'cop' ? '#4f8dff' : '#e9edf3', c.ai === 'cop' ? 5 : 3);
     for (const n of G.ents.npcs) if (!n.dead && n.kind !== 'ped') dot(n.pos.x, n.pos.z, n.kind === 'cop' ? '#4f8dff' : '#ff4455', 4);
-    const cc = G.world.chunks; for (const c of cc.values()) for (const o of c.orbs) if (Math.abs(o[0] - px) < R && Math.abs(o[2] - pz) < R) dot(o[0], o[2], '#66f6ff', 3);
-    for (const g of G.ents.gangs) { const dx = g.x - px, dz = g.z - pz, d = Math.hypot(dx, dz), m = Math.min(d, R - 8); const [a, b] = T(px + dx / (d || 1) * m, pz + dz / (d || 1) * m); x.strokeStyle = '#ff4455'; x.lineWidth = 3; x.beginPath(); x.arc(a, b, 9 + Math.sin(G.time * 5) * 2, 0, 7); x.stroke(); }
-    x.translate(S / 2, S / 2); x.rotate(-p.camYaw); x.fillStyle = 'rgba(255,255,255,.14)'; x.beginPath(); x.moveTo(0, 0); x.arc(0, 0, S / 2, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5); x.fill(); x.rotate(p.camYaw);
-    x.rotate(Math.PI - (p.mode === 'car' ? p.car.yaw : p.yaw)); x.fillStyle = p.hero.color; x.beginPath(); x.moveTo(0, -11); x.lineTo(8, 9); x.lineTo(0, 4); x.lineTo(-8, 9); x.fill(); x.restore();
-    x.fillStyle = '#fff'; x.font = '700 18px system-ui'; x.textAlign = 'center'; x.fillText('N', S / 2, 20);
+    for (const c of G.world.chunks.values()) for (const o of c.orbs) if (Math.abs(o[0] - cx) < Rx && Math.abs(o[2] - cz) < Rz) dot(o[0], o[2], '#66f6ff', 3);
+    for (const g of G.ents.gangs) { const dx = g.x - px, dz = g.z - pz, d = Math.hypot(dx, dz), m = round ? Math.min(d, R - 8) : d; const [a, b] = T(px + dx / (d || 1) * m, pz + dz / (d || 1) * m); x.strokeStyle = '#ff4455'; x.lineWidth = 3; x.beginPath(); x.arc(a, b, 9 + Math.sin(G.time * 5) * 2, 0, 7); x.stroke(); }
+    if (!round) { // landmark labels
+      x.font = '600 13px system-ui'; x.textAlign = 'center';
+      for (const L of Landmarks.within(cx, cz, R * 1.2)) { const [a, b] = T(L.x, L.z); if (a < -60 || b < -20 || a > W + 60 || b > H + 20) continue; x.fillStyle = '#ffd24a'; x.beginPath(); x.moveTo(a, b - 9); x.lineTo(a + 6, b); x.lineTo(a, b + 9); x.lineTo(a - 6, b); x.fill(); x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.65)'; x.strokeText(L.name, a, b - 14); x.fillStyle = '#fff'; x.fillText(L.name, a, b - 14); }
+    }
+    const [ax, az] = T(px, pz); x.translate(ax, az);
+    x.rotate(-p.camYaw); x.fillStyle = 'rgba(255,255,255,.14)'; x.beginPath(); x.moveTo(0, 0); x.arc(0, 0, round ? W / 2 : 70, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5); x.fill(); x.rotate(p.camYaw);
+    if (!round) { const pulse = 14 + (G.realTime || 0) % 1.2 * 18; x.strokeStyle = p.hero.color; x.globalAlpha = 1 - ((G.realTime || 0) % 1.2) / 1.2; x.lineWidth = 3; x.beginPath(); x.arc(0, 0, pulse, 0, 7); x.stroke(); x.globalAlpha = 1; }
+    x.rotate(Math.PI - (p.mode === 'car' ? p.car.yaw : p.yaw)); const s = round ? 1 : 1.3; x.fillStyle = p.hero.color; x.strokeStyle = '#fff'; x.lineWidth = round ? 0 : 2; x.beginPath(); x.moveTo(0, -11 * s); x.lineTo(8 * s, 9 * s); x.lineTo(0, 4 * s); x.lineTo(-8 * s, 9 * s); x.closePath(); x.fill(); if (!round) x.stroke(); x.restore();
+    if (!round) { x.font = '700 14px system-ui'; x.textAlign = 'left'; x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,.7)'; x.strokeText('You are here', ax + 16, az + 5); x.fillStyle = '#fff'; x.fillText('You are here', ax + 16, az + 5);
+      // scale bar
+      const m = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000].find(v => v * k > 70) || 5000; x.fillStyle = '#fff'; x.fillRect(16, H - 28, m * k, 4); x.font = '600 12px system-ui'; x.fillText(m >= 1000 ? m / 1000 + ' km' : m + ' m', 16, H - 34); }
+    x.fillStyle = '#fff'; x.font = '700 18px system-ui'; x.textAlign = 'center'; x.fillText('N', W / 2, round ? 20 : 26);
   }
+  // ---------- full-screen local map ----------
+  openLocal() {
+    const el = $('lmap'), cv = $('lmapC'); this.lm = this.lm || { k: 0.9, ox: 0, oz: 0, ptr: new Map() }; const L = this.lm; L.ox = L.oz = 0;
+    if (!L.wired) {
+      L.wired = true; const fit = () => { const d = Math.min(2, devicePixelRatio || 1); cv.width = innerWidth * d; cv.height = innerHeight * d; L.d = d; }; fit(); addEventListener('resize', fit);
+      const zoom = f => { L.k = clamp(L.k * f, 0.05, 6); };
+      cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); L.ptr.set(e.pointerId, [e.clientX, e.clientY]); });
+      cv.addEventListener('pointermove', e => { const q = L.ptr.get(e.pointerId); if (!q) return; if (L.ptr.size === 2) { const o = [...L.ptr.entries()].find(a => a[0] !== e.pointerId)[1], d0 = Math.hypot(q[0] - o[0], q[1] - o[1]), d1 = Math.hypot(e.clientX - o[0], e.clientY - o[1]); zoom(d1 / Math.max(1, d0)); } else { L.ox -= (e.clientX - q[0]) / L.k; L.oz -= (e.clientY - q[1]) / L.k; } L.ptr.set(e.pointerId, [e.clientX, e.clientY]); });
+      const up = e => L.ptr.delete(e.pointerId); cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+      cv.addEventListener('wheel', e => { zoom(Math.exp(-e.deltaY * 0.0015)); e.preventDefault(); }, { passive: false });
+      $('lm-in').onclick = () => zoom(1.6); $('lm-out').onclick = () => zoom(1 / 1.6); $('lm-me').onclick = () => { L.ox = L.oz = 0; };
+      $('lm-close').onclick = () => G.closeLocal(); $('lm-world').onclick = () => { G.closeLocal(); G.openMap(); };
+    }
+    const p = G.player, lat = Geo.toLat(p.pos.z), lon = Geo.toLon(p.pos.x);
+    $('lm-name').textContent = $('place').textContent; $('lm-sub').textContent = `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(4)}°${lon >= 0 ? 'E' : 'W'} · ${G.sky.localTime(lon)} local`;
+  }
+  drawLocal() { const L = this.lm, cv = $('lmapC'), x = cv.getContext('2d'), p = G.player; x.setTransform(L.d, 0, 0, L.d, 0, 0); this.paint(x, cv.width / L.d, cv.height / L.d, p.pos.x + L.ox, p.pos.z + L.oz, L.k, false); }
 }
 
 // ---------- globe ----------

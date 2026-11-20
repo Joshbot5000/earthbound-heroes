@@ -127,6 +127,8 @@ export class World {
   // ---------- generation ----------
   groundColor(x, z, h, slope, out) {
     const lat = Geo.toLat(z), lon = Geo.toLon(x); Geo.color(lat, lon, out);
+    // land the satellite colour map shows as sea (coarse coastlines): use a dry-grass land colour instead of blue
+    if (out[2] > out[1] * 1.02 && out[2] > out[0] * 1.1) { const k = clamp((out[2] - Math.max(out[0], out[1])) * 25, 0, 1); out[0] = lerp(out[0], 0.36, k); out[1] = lerp(out[1], 0.37, k); out[2] = lerp(out[2], 0.24, k); }
     const n = 0.86 + 0.28 * fbm((Geo.ox * CH + x) / 140, (Geo.oz * CH + z) / 140, 3);
     out[0] = out[0] * 1.35 * n + 0.03; out[1] = out[1] * 1.3 * n + 0.035; out[2] = out[2] * 1.2 * n + 0.02;
     const rock = smooth(0.55, 1.1, slope), sand = (1 - smooth(0.4, 3.2, h)) * (h > -4 ? 1 : 0.3), snow = smooth(0, 500, h - (4700 - Math.abs(lat) * 62));
