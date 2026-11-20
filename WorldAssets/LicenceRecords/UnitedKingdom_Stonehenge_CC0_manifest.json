@@ -1,0 +1,47 @@
+{
+ "slug": "stonehenge",
+ "triangles": 15642,
+ "texture_px": 2048,
+ "triangles_light": null,
+ "texture_px_light": null,
+ "files": {
+  "glb": {
+   "name": "stonehenge.glb",
+   "bytes": 942276
+  },
+  "blend": {
+   "name": "stonehenge.blend",
+   "bytes": 956031
+  },
+  "fbx": {
+   "name": "stonehenge.fbx",
+   "bytes": 1796972
+  },
+  "obj": {
+   "name": "stonehenge-obj.zip",
+   "bytes": 910239
+  },
+  "usdz": {
+   "name": "stonehenge.usdz",
+   "bytes": 1479866
+  }
+ },
+ "extras": {
+  "license": "CC0-1.0",
+  "source": "grab3d.com",
+  "dimensions_m": "22.306 x 22.237 x 5.954",
+  "triangles": 15642,
+  "textures": "PBR 2048px: base color, roughness, metallic, normal (baked)",
+  "generator": "Created by grab3d",
+  "created": "2026-09-26",
+  "real_size": "stonehenge type stone circle diorama, round grass base 22 m across, sarsen ring 14.8 m across, central trilithon 5.1 m high",
+  "notes": "prehistoric stone circle on a round grass disc with a low henge bank and an earth rim: outer ring of sixteen sarsen positions with lintels on several sections (some stones missing or fallen), inner circle of small bluish stones, horseshoe of five trilithons with the tallest in the middle and one collapsed, single heel stone outside on the axis, lichen and moss; no cult symbols, no figures; origin bottom centre",
+  "set": "Cozy Ancient Ruins Kit"
+ },
+ "origin": {
+  "method": "procedural",
+  "detail": "Built procedurally with Blender scripts. The scripts were written with the help of an AI coding assistant. No generative AI model produced the geometry or textures directly.",
+  "ai_content": false,
+  "ai_assisted_code": true
+ }
+}

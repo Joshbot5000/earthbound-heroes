@@ -1,0 +1,47 @@
+{
+ "slug": "egyptian-pyramid",
+ "triangles": 18624,
+ "texture_px": 2048,
+ "triangles_light": null,
+ "texture_px_light": null,
+ "files": {
+  "glb": {
+   "name": "egyptian-pyramid.glb",
+   "bytes": 976904
+  },
+  "blend": {
+   "name": "egyptian-pyramid.blend",
+   "bytes": 978368
+  },
+  "fbx": {
+   "name": "egyptian-pyramid.fbx",
+   "bytes": 1818972
+  },
+  "obj": {
+   "name": "egyptian-pyramid-obj.zip",
+   "bytes": 810070
+  },
+  "usdz": {
+   "name": "egyptian-pyramid.usdz",
+   "bytes": 1594431
+  }
+ },
+ "extras": {
+  "license": "CC0-1.0",
+  "source": "grab3d.com",
+  "dimensions_m": "47.015 x 46.675 x 21.540",
+  "triangles": 18624,
+  "textures": "PBR 2048px: base color, roughness, metallic, normal (baked)",
+  "generator": "Created by grab3d",
+  "created": "2026-09-26",
+  "real_size": "egyptian pyramid, 36 x 36 m base, 22.8 m high, with a sand apron 46 x 46 m",
+  "notes": "smooth sandstone casing at 51.8 degrees with fine course joints, weathered top where the casing is missing and the stepped core blocks show, entrance with a gabled lintel on the north side (front, -Y), a few fallen casing blocks and a sand apron with drifts and wind ripples; no hieroglyphs, no statues; origin bottom centre",
+  "set": "Cozy Ancient Ruins Kit"
+ },
+ "origin": {
+  "method": "procedural",
+  "detail": "Built procedurally with Blender scripts. The scripts were written with the help of an AI coding assistant. No generative AI model produced the geometry or textures directly.",
+  "ai_content": false,
+  "ai_assisted_code": true
+ }
+}

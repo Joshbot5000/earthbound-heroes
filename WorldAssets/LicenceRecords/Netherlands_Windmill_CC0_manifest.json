@@ -1,0 +1,47 @@
+{
+ "slug": "windmill",
+ "triangles": 17420,
+ "texture_px": 2048,
+ "triangles_light": null,
+ "texture_px_light": null,
+ "files": {
+  "glb": {
+   "name": "windmill.glb",
+   "bytes": 1483756
+  },
+  "blend": {
+   "name": "windmill.blend",
+   "bytes": 1307327
+  },
+  "fbx": {
+   "name": "windmill.fbx",
+   "bytes": 2493580
+  },
+  "obj": {
+   "name": "windmill-obj.zip",
+   "bytes": 1291012
+  },
+  "usdz": {
+   "name": "windmill.usdz",
+   "bytes": 2099103
+  }
+ },
+ "extras": {
+  "license": "CC0-1.0",
+  "source": "grab3d.com",
+  "dimensions_m": "16.162 x 17.704 x 24.081",
+  "triangles": 17420,
+  "textures": "PBR 2048px: base color, roughness, metallic, normal (baked)",
+  "generator": "Created by grab3d",
+  "created": "2026-09-26",
+  "real_size": "Dutch tower windmill with stage, octagonal tower approx. 9.8 m wide at the base, cap top 17.9 m, sail span 19 m (hub at 16 m)",
+  "notes": "exterior only (closed tower, opaque windows, no interior); sails face -Y; the sails (windmill_sails) are a separate object with its origin on the wind shaft axis (hub centre) - rotate around the local Y axis to turn them; no text",
+  "set": "Cozy Buildings Kit"
+ },
+ "origin": {
+  "method": "procedural",
+  "detail": "Built procedurally with Blender scripts. The scripts were written with the help of an AI coding assistant. No generative AI model produced the geometry or textures directly.",
+  "ai_content": false,
+  "ai_assisted_code": true
+ }
+}

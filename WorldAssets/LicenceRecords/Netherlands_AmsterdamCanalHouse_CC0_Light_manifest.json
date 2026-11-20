@@ -1,0 +1,55 @@
+{
+ "slug": "dutch-canal-house",
+ "triangles": 33911,
+ "texture_px": 2048,
+ "triangles_light": 21447,
+ "texture_px_light": 1024,
+ "files": {
+  "glb": {
+   "name": "dutch-canal-house.glb",
+   "bytes": 3697504
+  },
+  "blend": {
+   "name": "dutch-canal-house.blend",
+   "bytes": 2681290
+  },
+  "fbx": {
+   "name": "dutch-canal-house.fbx",
+   "bytes": 4641612
+  },
+  "obj": {
+   "name": "dutch-canal-house-obj.zip",
+   "bytes": 2461174
+  },
+  "usdz": {
+   "name": "dutch-canal-house.usdz",
+   "bytes": 4627410
+  },
+  "glb_light": {
+   "name": "dutch-canal-house-light.glb",
+   "bytes": 1638684
+  },
+  "fbx_light": {
+   "name": "dutch-canal-house-light.fbx",
+   "bytes": 2341292
+  }
+ },
+ "extras": {
+  "license": "CC0-1.0",
+  "source": "grab3d.com",
+  "dimensions_m": "6.834 x 11.970 x 12.650",
+  "triangles": 33911,
+  "textures": "PBR 2048px: base color, roughness, metallic, normal (baked)",
+  "generator": "Created by grab3d",
+  "created": "2026-10-19",
+  "real_size": "narrow dutch canal house, 5 m wide, 10 m deep, 12.7 m tall incl. stepped gable and finial, approx. 6.8 x 12 m footprint incl. stoop, bicycle and roof overhang",
+  "notes": "exterior only (closed building, opaque windows, no interior); front faces -Y; the front door (dutch-canal-house_door_l) is a separate object with its origin on the hinge axis (left side seen from outside), rotate around local Z to open outwards; door frame is dutch-canal-house_frame; brick facade baked separately (dutch-canal-house_facade); no signs, no house number, no text",
+  "set": "Cozy Homes Around the World Kit"
+ },
+ "origin": {
+  "method": "procedural",
+  "detail": "Built procedurally with Blender scripts. The scripts were written with the help of an AI coding assistant. No generative AI model produced the geometry or textures directly.",
+  "ai_content": false,
+  "ai_assisted_code": true
+ }
+}
