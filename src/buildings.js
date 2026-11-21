@@ -217,6 +217,19 @@ export class MeshBuilder {
   constructor() { this.p = []; this.n = []; this.uv = []; this.uv1 = []; this.c = []; this.b = []; this.i = []; }
   v(x, y, z, nx, ny, nz, u, w, e, h, col, B) { this.p.push(x, y, z); this.n.push(nx, ny, nz); this.uv.push(u, w); this.uv1.push(e, h); this.c.push(col.r, col.g, col.b); this.b.push(B[0], B[1], B[2], B[3]); return this.p.length / 3 - 1; }
   tri(a, b, c) { this.i.push(a, b, c); }
+  // a horizontal band projecting d metres out from the walls of ring r, from y to y + th
+  ledge(r, sg, y, d, th, col, B) {
+    const n = r.length / 2; if (n < 3) return; const N = [];
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n, dx = r[j * 2] - r[i * 2], dz = r[j * 2 + 1] - r[i * 2 + 1], L = Math.hypot(dx, dz) || 1; N.push([sg * dz / L, -sg * dx / L]); }
+    const O = []; for (let i = 0; i < n; i++) { const a = N[(i + n - 1) % n], b = N[i]; let mx = a[0] + b[0], mz = a[1] + b[1]; const ml = Math.hypot(mx, mz) || 1; mx /= ml; mz /= ml; const k = Math.min(3, 1 / Math.max(0.3, mx * b[0] + mz * b[1])); O.push([r[i * 2] + mx * d * k, r[i * 2 + 1] + mz * d * k]); }
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, [nx, nz] = N[i], ax = r[i * 2], az = r[i * 2 + 1], bx = r[j * 2], bz = r[j * 2 + 1], [oax, oaz] = O[i], [obx, obz] = O[j], L = Math.hypot(bx - ax, bz - az); if (L < 0.05) continue;
+      const flip = (-(bz - az) * nx + (bx - ax) * nz) > 0, q = (p0, p1, p2, p3, n0) => { const v = [p0, p1, p2, p3].map((p, k) => this.v(p[0], p[1], p[2], n0[0], n0[1], n0[2], k === 1 || k === 2 ? L : 0, p[1] - y, L, th, col, B)); if (flip) { this.tri(v[0], v[1], v[2]); this.tri(v[0], v[2], v[3]); } else { this.tri(v[0], v[2], v[1]); this.tri(v[0], v[3], v[2]); } };
+      q([oax, y + th, oaz], [obx, y + th, obz], [obx, y, obz], [oax, y, oaz], [nx, 0, nz]);                // outer face
+      q([ax, y + th, az], [bx, y + th, bz], [obx, y + th, obz], [oax, y + th, oaz], [0, 1, 0]);            // top
+      q([oax, y, oaz], [obx, y, obz], [bx, y, bz], [ax, y, az], [0, -1, 0]);                                // underside
+    }
+  }
   // footprint rings (flat [x,z,...] arrays, first = outer), y0..y1 with ground level g
   building(o) {
     const { rings, y0, g, col, roofCol, style, tex, seed, shop } = o, y1 = o.y1 + seed * 0.06, H = y1 - g; const B = [style, seed, tex, 0];
@@ -238,6 +251,9 @@ export class MeshBuilder {
         }
       }
     });
+    // a projecting cornice under the roof line and a plinth at street level break up the hard box silhouette
+    if (o.parapet !== false && H > 5) { const kind = B[3]; B[3] = 4; const r0 = rings[0], sg = AREA(r0) > 0 ? 1 : -1, top = y1 + parapet;
+      this.ledge(r0, sg, top - 0.55, Math.min(0.55, 0.25 + H * 0.01), 0.55, col, B); this.ledge(r0, sg, y0 < g ? g - 0.3 : y0, 0.12, Math.min(1.1, H * 0.15) + (y0 < g ? 0.3 : 0), col, B); B[3] = kind; }
     if (!roof) { this.flat(rings, y1, roofCol, B); return; }
     B[3] = 3; const { cx, cz, ux, uz, ha, hb } = ob, ov = 0.35, A2 = ha + ov, Bh = hb + ov, P = (a, b, y) => [cx + ux * a - uz * b, y, cz + uz * a + ux * b];
     const rh = Math.min(hb * (roof === 5 ? 1.1 : 0.85), roof === 4 ? hb : 8), top = y1 + rh;

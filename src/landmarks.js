@@ -2,6 +2,7 @@
 // footprint they stand on. Big Ben shows the real time in London.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { G } from './util.js';
 import { Geo, CH } from './geo.js';
 import { City, BASE } from './city.js';
@@ -89,11 +90,12 @@ function unionFlag() {
 class B {
   constructor() { this.g = new THREE.Group(); this.solids = []; }
   mesh(geo, mat, x = 0, y = 0, z = 0, ry = 0, solid = false) { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = true; m.receiveShadow = true; this.g.add(m); return m; }
-  box(w, h, d, mat, x, y, z, solid = true, ry = 0) { this.mesh(new THREE.BoxGeometry(w, h, d), mat, x, y + h / 2, z, ry); if (solid) this.solids.push([x, z, w, d, y, y + h, ry]); return this; }
-  cyl(r0, r1, h, mat, x, y, z, seg = 16, solid = true) { this.mesh(new THREE.CylinderGeometry(r1, r0, h, seg), mat, x, y + h / 2, z); if (solid) this.solids.push([x, z, Math.max(r0, r1) * 1.6, Math.max(r0, r1) * 1.6, y, y + h, 0]); return this; }
+  // solid blocks get slightly rounded edges (real masonry is never razor-sharp); thin parts stay plain boxes
+  box(w, h, d, mat, x, y, z, solid = true, ry = 0) { const mn = Math.min(w, h, d); this.mesh(mn >= 3 ? new RoundedBoxGeometry(w, h, d, 1, Math.min(0.45, mn * 0.06)) : new THREE.BoxGeometry(w, h, d), mat, x, y + h / 2, z, ry); if (solid) this.solids.push([x, z, w, d, y, y + h, ry]); return this; }
+  cyl(r0, r1, h, mat, x, y, z, seg = 16, solid = true) { if (seg >= 12) seg = Math.max(seg, Math.min(48, Math.round(Math.max(r0, r1) * 3 + 16))); this.mesh(new THREE.CylinderGeometry(r1, r0, h, seg), mat, x, y + h / 2, z); if (solid) this.solids.push([x, z, Math.max(r0, r1) * 1.6, Math.max(r0, r1) * 1.6, y, y + h, 0]); return this; }
   cone(r, h, mat, x, y, z, seg = 4, rot = Math.PI / 4) { const g = new THREE.ConeGeometry(r, h, seg); g.rotateY(rot); this.mesh(g, mat, x, y + h / 2, z); return this; }
-  sphere(r, mat, x, y, z, sy = 1, half = false) { const g = new THREE.SphereGeometry(r, 24, 16, 0, Math.PI * 2, 0, half ? Math.PI / 2 : Math.PI); g.scale(1, sy, 1); this.mesh(g, mat, x, y, z); return this; }
-  lathe(pts, mat, x, y, z, seg = 24) { this.mesh(new THREE.LatheGeometry(pts.map(([r, h]) => new THREE.Vector2(r, h)), seg), mat, x, y, z); return this; }
+  sphere(r, mat, x, y, z, sy = 1, half = false) { const g = new THREE.SphereGeometry(r, r > 4 ? 40 : 24, r > 4 ? 24 : 14, 0, Math.PI * 2, 0, half ? Math.PI / 2 : Math.PI); g.scale(1, sy, 1); this.mesh(g, mat, x, y, z); return this; }
+  lathe(pts, mat, x, y, z, seg = 24) { if (seg >= 12) seg = Math.max(seg, 36); this.mesh(new THREE.LatheGeometry(pts.map(([r, h]) => new THREE.Vector2(r, h)), seg), mat, x, y, z); return this; }
   pinnacles(w, y, h, mat, n = 4) { for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2 + Math.PI / 4; this.cone(w * 0.08, h, mat, Math.cos(a) * w * 0.68, y, Math.sin(a) * w * 0.68, 6, 0); } return this; }
 }
 function clockTower(o) {
@@ -224,18 +226,53 @@ function gatewayOfIndia() {
   b.box(D + 10, 0.5, Wd + 30, m.stonePlain, 0, -0.4, 0, false);
   return b;
 }
+// The Eiffel Tower as a real iron lattice: four curved legs of box trusses (corner girders plus X bracing on every
+// face) that meet at the second floor, one shaft above, the decorative arches, three platforms and the top.
+// Half-widths follow the real profile: 62.5 m at the base, ~35 m at the first floor (57 m), ~19 m at the second
+// (116 m), ~5 m at the top floor (276 m); 330 m to the antenna tip.
 function eiffel() {
-  const b = new B(), m = MAT();
-  // four legs to the first floor, then a single tapering shaft; open lattice everywhere
-  for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4, x = Math.cos(a) * 44, z = Math.sin(a) * 44, leg = new THREE.Mesh(new THREE.CylinderGeometry(7, 13, 62, 4, 4, true), m.lattice); leg.position.set(x * 0.72, 30, z * 0.72); leg.rotation.y = a + Math.PI / 4; leg.rotation.z = Math.cos(a) * -0.33; leg.rotation.x = Math.sin(a) * 0.33; leg.castShadow = true; b.g.add(leg); b.solids.push([x, z, 14, 14, 0, 30, 0]); }
-  b.box(70, 6, 70, m.lattice, 0, 57, 0, true);
-  const pts = []; for (let i = 0; i <= 20; i++) { const y = 63 + i / 20 * 213; pts.push(new THREE.Vector2(Math.max(4, 26 * Math.exp(-(y - 63) / 85)), y)); }
-  const sh = new THREE.Mesh(new THREE.LatheGeometry(pts, 4), m.lattice); sh.rotation.y = Math.PI / 4; sh.castShadow = true; b.g.add(sh);
-  b.box(36, 3, 36, m.lattice, 0, 115, 0, true); b.box(18, 4, 18, m.iron, 0, 276, 0, true);
-  b.cyl(2.5, 1.5, 20, m.iron, 0, 280, 0, 8, false); b.cyl(0.5, 0.3, 30, m.iron, 0, 300, 0, 6, false);
-  for (let k = 0; k < 5; k++) b.solids.push([0, 0, 40 - k * 7, 40 - k * 7, 63 + k * 42, 105 + k * 42, Math.PI / 4]);
+  const b = new B(), m = MAT(), iron = m.eiffel || (m.eiffel = new THREE.MeshStandardMaterial({ color: 0x6a5240, roughness: 0.55, metalness: 0.55, emissive: 0xffb050, emissiveIntensity: 0 }));
+  const W = y => Math.max(4.6, 62.5 * Math.exp(-y / 97)), Gp = y => y >= 112 ? 0 : 37 * Math.pow(1 - y / 112, 1.15);
+  const geos = [], up = new THREE.Vector3(0, 1, 0), M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), S = new THREE.Vector3(), Pm = new THREE.Vector3();
+  const bar = (a, c, t) => { const d = new THREE.Vector3().subVectors(c, a), L = d.length(); if (L < 0.05) return; Q.setFromUnitVectors(up, d.divideScalar(L)); S.set(t, L, t); Pm.addVectors(a, c).multiplyScalar(0.5); M4.compose(Pm, Q, S); const g = BAR.clone(); g.applyMatrix4(M4); geos.push(g); };
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  // a box truss between stacked square sections; corners(y) returns its 4 corners at height y
+  const truss = (y0, y1, n, corners, tc, tb) => {
+    let prev = corners(y0);
+    for (let k = 1; k <= n; k++) { const y = y0 + (y1 - y0) * k / n, cur = corners(y);
+      for (let c = 0; c < 4; c++) { const c2 = (c + 1) % 4; bar(prev[c], cur[c], tc); bar(prev[c], cur[c2], tb); bar(prev[c2], cur[c], tb); bar(cur[c], cur[c2], tb * 1.2); }
+      prev = cur; }
+  };
+  // the four legs, each a box truss whose square section shrinks and leans inward as it rises
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) truss(0, 116, 22, y => { const w = W(y), g = Gp(y), i = Math.min(g, w - 2.5); return [V(sx * i, y, sz * i), V(sx * w, y, sz * i), V(sx * w, y, sz * w), V(sx * i, y, sz * w)]; }, 1.1, 0.32);
+  // the single shaft from the second floor to the top
+  truss(116, 300, 34, y => { const w = W(y); return [V(-w, y, -w), V(w, y, -w), V(w, y, w), V(-w, y, w)]; }, 0.7, 0.22);
+  // the decorative arches under the first floor, one on each face
+  for (let f = 0; f < 4; f++) { const pts = []; for (let i = 0; i <= 24; i++) { const t = i / 24, x = (t * 2 - 1) * 37, y = 39 - 30 * Math.pow(Math.abs(t * 2 - 1), 2.2); const w = W(y) - 0.5; pts.push(f % 2 ? V(x, y, (f < 2 ? 1 : -1) * w) : V((f < 2 ? 1 : -1) * w, y, x)); }
+    const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.9, 6, false); geos.push(g.toNonIndexed()); }
+  b.mesh(mergeGeometries(geos.map(g => g.index ? g.toNonIndexed() : g)), iron);
+  // platforms: the first floor with its frieze of arches, the second floor, the top floor cabin
+  const fr = canvas(256, 32, (x, w, h) => { x.fillStyle = '#6a5240'; x.fillRect(0, 0, w, h); x.fillStyle = '#2a2018'; for (let i = 0; i < 16; i++) { x.beginPath(); x.arc(i * 16 + 8, 26, 6, Math.PI, 0); x.lineTo(i * 16 + 14, 32); x.lineTo(i * 16 + 2, 32); x.fill(); } x.fillStyle = '#c8a050'; x.fillRect(0, 2, w, 3); }); fr.repeat.set(8, 1);
+  const frieze = new THREE.MeshStandardMaterial({ map: fr, roughness: 0.6, metalness: 0.4, emissive: 0xffb050, emissiveIntensity: 0, emissiveMap: fr });
+  b.box(2 * W(57) + 3, 6, 2 * W(57) + 3, frieze, 0, 54, 0); b.box(2 * W(57) - 14, 0.6, 2 * W(57) - 14, m.iron, 0, 60, 0, false);
+  b.box(2 * W(116) + 2, 4, 2 * W(116) + 2, frieze, 0, 114, 0); b.box(2 * W(116) - 6, 6, 2 * W(116) - 6, m.glass, 0, 118, 0, false);
+  b.box(2 * W(276) + 4, 7, 2 * W(276) + 4, m.iron, 0, 273, 0); b.box(2 * W(276) + 2, 3, 2 * W(276) + 2, m.glass, 0, 274, 0, false);
+  b.cyl(3.2, 2, 18, iron, 0, 300, 0, 12, false); b.cyl(1.6, 1, 6, m.white, 0, 318, 0, 10, false); b.cyl(0.4, 0.15, 6, m.iron, 0, 324, 0, 6, false);
+  // collision: legs, floors and shaft as stacked boxes
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) for (let k = 0; k < 4; k++) { const y0 = k * 28, w = W(y0 + 14), g = Math.min(Gp(y0 + 14), w - 3), c = (w + g) / 2; b.solids.push([sx * c, sz * c, w - g, w - g, y0, y0 + 28, 0]); }
+  for (let k = 0; k < 6; k++) { const y0 = 116 + k * 30, w = W(y0 + 15) * 2; b.solids.push([0, 0, w, w, y0, y0 + 30, 0]); }
+  b.g.userData.eiffel = { iron, frieze };
+  // the hourly sparkle: points of light that twinkle all over the tower for a few minutes after the hour
+  const N = 1400, sp = new Float32Array(N * 3); for (let i = 0; i < N; i++) { const y = Math.pow(Math.random(), 1.3) * 300, w = W(y) + 0.6, s2 = Math.random() * 8 | 0, t = Math.random() * 2 - 1; const side = s2 >> 1, sgn = s2 & 1 ? 1 : -1; const g = y < 116 ? Gp(y) : 0, x = side ? sgn * w : t * w, z = side ? t * w : sgn * w; if (y < 100 && Math.abs(side ? z : x) < g) { i--; continue; } sp.set([x, y, z], i * 3); }
+  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+  const sparkle = new THREE.Points(sg, new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uT: { value: 0 }, uA: { value: 0 } },
+    vertexShader: 'uniform float uT; varying float vA; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); float r = fract(sin(dot(position, vec3(12.9898, 78.233, 37.719))) * 43758.5453); vA = step(0.82, fract(r * 7.0 + uT * (1.5 + r * 2.0))); gl_PointSize = 900.0 / max(1.0, -mv.z); gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'uniform float uA; varying float vA; void main(){ float d = length(gl_PointCoord - 0.5); gl_FragColor = vec4(vec3(1.0, 0.97, 0.9) * smoothstep(0.5, 0.0, d) * vA * uA, 1.0); }' }));
+  sparkle.frustumCulled = false; b.g.add(sparkle); b.g.userData.sparkle = sparkle;
+  // the beacon at the top sweeping over Paris
   return b;
 }
+const BAR = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
 function liberty() {
   const b = new B(), m = MAT();
   b.box(60, 8, 60, m.stonePlain, 0, 0, 0); b.box(20, 27, 20, m.stonePlain, 0, 8, 0); b.box(14, 12, 14, m.stonePlain, 0, 35, 0);
@@ -569,6 +606,7 @@ export const Landmarks = {
       if (!g.parent) continue;
       const u = g.userData;
       if (u.wheel) { u.wheel.rotation.x += dt * 0.0045 * 60 / 60; for (const p of u.pods) p.rotation.x = -u.wheel.rotation.x; }
+      if (u.eiffel) { const n = G.sky ? G.sky.night : 0; u.eiffel.iron.emissiveIntensity = n * 0.55; u.eiffel.frieze.emissiveIntensity = n * 0.6; const ms = G.sky ? G.sky.now() : Date.now(), min = new Date(ms + 3600000).getUTCMinutes(); const on = n > 0.5 && min < 5 ? 1 : 0; u.sparkle.material.uniforms.uA.value = on * 2.5; u.sparkle.material.uniforms.uT.value = G.time; u.sparkle.visible = on > 0; }
       if (u.glow || u.sail) { const n = G.sky ? G.sky.night : 0; if (u.glow) { u.glow.emissiveIntensity = n * 2.2; u.glow.emissive.setHSL((G.time * 0.05) % 1, 0.8, 0.5); } if (u.sail) u.sail.emissiveIntensity = n * 0.8; }
       if (u.flag) { const t = G.time; u.flag.rotation.y = Math.sin(t * 1.3) * 0.25; }
     }
