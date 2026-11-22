@@ -7,13 +7,13 @@ import { clamp } from './util.js';
 const M = 111320;
 // Must match tools/overture/extract.py
 export const ZONES = [
-  { key: 'london', name: 'London', bbox: [-0.163, 51.488, -0.062, 51.523], region: 'uk' },
+  { key: 'london', name: 'London', bbox: [-0.200, 51.475, -0.030, 51.540], region: 'uk' },
   { key: 'mumbai', name: 'Mumbai', bbox: [72.800, 18.893, 72.862, 19.030], region: 'india' },
-  { key: 'newyork', name: 'New York', bbox: [-74.020, 40.700, -73.965, 40.770], region: 'us' },
-  { key: 'paris', name: 'Paris', bbox: [2.280, 48.845, 2.365, 48.875], region: 'france' },
-  { key: 'tokyo', name: 'Tokyo', bbox: [139.735, 35.650, 139.790, 35.700], region: 'japan' },
-  { key: 'dubai', name: 'Dubai', bbox: [55.250, 25.175, 55.300, 25.215], region: 'gulf' },
-  { key: 'sydney', name: 'Sydney', bbox: [151.195, -33.880, 151.225, -33.850], region: 'australia' },
+  { key: 'newyork', name: 'New York', bbox: [-74.025, 40.700, -73.930, 40.800], region: 'us' },
+  { key: 'paris', name: 'Paris', bbox: [2.255, 48.835, 2.410, 48.890], region: 'france' },
+  { key: 'tokyo', name: 'Tokyo', bbox: [139.700, 35.645, 139.815, 35.715], region: 'japan' },
+  { key: 'dubai', name: 'Dubai', bbox: [55.240, 25.170, 55.320, 25.235], region: 'gulf' },
+  { key: 'sydney', name: 'Sydney', bbox: [151.185, -33.890, 151.240, -33.840], region: 'australia' },
 ];
 for (const z of ZONES) { z.lat0 = (z.bbox[1] + z.bbox[3]) / 2; z.lon0 = (z.bbox[0] + z.bbox[2]) / 2; }
 export const ROAD_W = [0, 15, 13, 11.5, 10, 8.5, 7, 6, 4.5, 0, 6, 2.6, 2.6];   // by class

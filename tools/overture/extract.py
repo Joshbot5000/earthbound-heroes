@@ -10,13 +10,13 @@ from shapely.ops import unary_union
 from PIL import Image, ImageDraw
 
 CITIES = {
-    'london': dict(name='London', bbox=(-0.163, 51.488, -0.062, 51.523), region='uk', drive='left'),
+    'london': dict(name='London', bbox=(-0.200, 51.475, -0.030, 51.540), region='uk', drive='left'),
     'mumbai': dict(name='Mumbai', bbox=(72.800, 18.893, 72.862, 19.030), region='india', drive='left'),
-    'newyork': dict(name='New York', bbox=(-74.020, 40.700, -73.965, 40.770), region='us', drive='right'),
-    'paris': dict(name='Paris', bbox=(2.280, 48.845, 2.365, 48.875), region='france', drive='right'),
-    'tokyo': dict(name='Tokyo', bbox=(139.735, 35.650, 139.790, 35.700), region='japan', drive='left'),
-    'dubai': dict(name='Dubai', bbox=(55.250, 25.175, 55.300, 25.215), region='gulf', drive='right'),
-    'sydney': dict(name='Sydney', bbox=(151.195, -33.880, 151.225, -33.850), region='australia', drive='left'),
+    'newyork': dict(name='New York', bbox=(-74.025, 40.700, -73.930, 40.800), region='us', drive='right'),
+    'paris': dict(name='Paris', bbox=(2.255, 48.835, 2.410, 48.890), region='france', drive='right'),
+    'tokyo': dict(name='Tokyo', bbox=(139.700, 35.645, 139.815, 35.715), region='japan', drive='left'),
+    'dubai': dict(name='Dubai', bbox=(55.240, 25.170, 55.320, 25.235), region='gulf', drive='right'),
+    'sydney': dict(name='Sydney', bbox=(151.185, -33.890, 151.240, -33.840), region='australia', drive='left'),
 }
 key = sys.argv[1]; C = CITIES[key]; x0, y0, x1, y1 = C['bbox']
 lat0, lon0 = (y0 + y1) / 2, (x0 + x1) / 2; M = 111320.0; cos0 = math.cos(math.radians(lat0)); Q = 4  # 0.25 m units
