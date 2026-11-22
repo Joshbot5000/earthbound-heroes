@@ -143,6 +143,7 @@ export function copLook(regKey) {
   if (regKey === 'us') return { skin: pick(SKIN.us), top: 0x141c30, bottom: 0x141c30, shoes: 0x0a0a0a, sleeves: 'short', hairStyle: 'short', headwear: 'cap', capCol: 0x141c30, hair: 0x2a1a10 };
   return { skin: pick(SKIN.default), top: 0x1a2a4a, bottom: 0x1a2030, shoes: 0x0a0a0a, sleeves: 'long', hairStyle: 'short', headwear: 'cap', capCol: 0x1a2030, hair: 0x2a1a10, vest: Math.random() < 0.4 ? 0xd8f020 : undefined };
 }
+export function soldierLook() { return { skin: pick(SKIN.default), top: 0x4f5a36, bottom: 0x47512f, shoes: 0x1a1612, vest: 0x3c4428, sleeves: 'long', hairStyle: 'short', headwear: 'cap', capCol: 0x3e4a2c, hair: 0x1a120c, gloves: 0x2a2a22, scale: 1.04 }; }
 export function thugLook(heavy) {
   return heavy ? { skin: pick(SKIN.default), top: 0x2a0e12, bottom: 0x141418, shoes: 0x0a0a0a, sleeves: 'long', hood: true, mask: 0x111111, accent: 0xff2a3a, accentGlow: 2, emblem: true, scale: 1.25, gloves: 0x111111 }
     : { skin: pick(SKIN.default), top: pick([0x1a1b20, 0x2a2c30, 0x3a1418]), bottom: 0x16171b, shoes: 0x0a0a0a, sleeves: 'long', hood: Math.random() < 0.6, mask: 0x8a1018, accent: 0xff2a3a, accentGlow: 1.6, emblem: true, hairStyle: 'short', hair: 0x1a120c, scale: 1.02 };
@@ -156,7 +157,16 @@ export function animateRig(r, s, dt) {
     aLx: -sn * 0.9 * run, aRx: sn * 0.9 * run, aLz: 0.1 + 0.02 * idle, aRz: -0.1 - 0.02 * idle, fL: -0.2 - run * 0.95, fR: -0.2 - run * 0.95,
     lLx: sn * 0.95 * run, lRx: -sn * 0.95 * run, sL: Math.max(0, cs) * 1.5 * run + 0.05, sR: Math.max(0, -cs) * 1.5 * run + 0.05, rootX: 0, headX: 0 };
   if (s.air) { const up = clamp((s.vy || 0) / 12, -1, 1); Object.assign(T, { bodyX: 0.15 - up * 0.2, aLx: -0.4 + up * 1.2, aRx: -0.4 + up * 1.2, aLz: 0.8, aRz: -0.8, fL: -0.4, fR: -0.4, lLx: 0.5 + up * 0.3, lRx: -0.35, sL: 1.1, sR: 0.5 }); }
-  if (s.swing) Object.assign(T, { bodyX: 0.25, aLx: -2.9, aRx: -2.6, aLz: 0.25, aRz: -0.1, fL: -0.15, fR: -0.5, lLx: 0.75, lRx: -0.25, sL: 1.25, sR: 0.45, chestY: 0.2 });
+  if (s.swing) {
+    // Spider-Man style: knees tucked through the bottom of the arc, legs whipping out on the upswing, the free arm
+    // thrown out for balance; the holding arm is aimed up the web separately
+    const k = s.swingK ?? 0.5, L = (a, b) => a + (b - a) * k, R = (s.hold ?? 1) > 0;
+    Object.assign(T, { bodyX: L(0.45, 0.1), lLx: L(-1.35, 0.35), lRx: L(-1.0, -0.55), sL: L(2.0, 0.35), sR: L(1.8, 0.95), chestY: (R ? 0.25 : -0.25) * (1 - k * 0.5), headX: L(-0.2, 0.1),
+      aLx: R ? L(-0.5, 0.4) : -2.8, aLz: R ? L(1.3, 0.9) : 0.2, fL: R ? -0.35 : -0.1, aRx: R ? -2.8 : L(-0.5, 0.4), aRz: R ? -0.2 : L(-1.3, -0.9), fR: R ? -0.1 : -0.35 });
+  }
+  if (s.flip) Object.assign(T, { bodyX: 0.6, lLx: -1.55, lRx: -1.45, sL: 2.3, sR: 2.25, aLx: -1.3, aRx: -1.3, aLz: 0.35, aRz: -0.35, fL: -1.7, fR: -1.7, headX: 0.35 });
+  if (s.dive) { const d = s.dive; Object.assign(T, { bodyX: 0.15, aLx: 0.35 * d - 0.4 * (1 - d), aRx: 0.35 * d - 0.4 * (1 - d), aLz: 0.3, aRz: -0.3, fL: -0.1, fR: -0.1, lLx: 0.12, lRx: -0.12, sL: 0.15, sR: 0.35, headX: -0.6 * d }); }
+  if (s.land) { const l = s.land; Object.assign(T, { bodyY: 0.94 - 0.42 * l, bodyX: 0.65 * l, lLx: -1.25 * l, sL: 2.1 * l, lRx: 0.55 * l, sR: 1.7 * l, aRx: -0.35, fR: -0.15, aRz: -0.25, aLx: 0.5 * l, aLz: 1.1 * l, fL: -0.4, headX: -0.25 * l }); }
   if (s.fly) Object.assign(T, { bodyX: 1.25, aLx: 0.5, aRx: 0.5, aLz: 0.35, aRz: -0.35, fL: -0.1, fR: -0.1, lLx: 0.12, lRx: -0.08, sL: 0.15, sR: 0.25, headX: -0.9 });
   if (s.slide) Object.assign(T, { bodyX: 0.35, bodyY: 0.8, aLx: -0.9, aRx: 0.7, aLz: 1.0, aRz: -0.9, fL: -0.3, fR: -0.3, lLx: 0.75, lRx: -0.55, sL: 0.9, sR: 0.75, chestY: 0.5 });
   if (s.wall) Object.assign(T, { bodyX: 0.5, bodyZ: s.wall * 0.3 });

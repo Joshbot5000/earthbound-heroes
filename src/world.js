@@ -336,7 +336,7 @@ export class World {
     if (ch.ground) { this.scene.remove(ch.ground); ch.ground.geometry.dispose(); ch.ground = null; ch.hgt = null; }
     for (const m of ch.extra) { this.scene.remove(m); m.geometry.dispose(); } ch.extra.length = 0;
   }
-  dropBuildings(ch) { if (ch.bmesh) { this.scene.remove(ch.bmesh); ch.bmesh.geometry.dispose(); ch.bmesh = null; } if (ch.orbMesh) { this.scene.remove(ch.orbMesh); ch.orbMesh = null; } for (const L of ch.marks) if (L.group) this.scene.remove(L.group); }
+  dropBuildings(ch) { if (ch.bmesh) { this.scene.remove(ch.bmesh); ch.bmesh.geometry.dispose(); ch.bmesh = null; } if (ch.orbMesh) { this.scene.remove(ch.orbMesh); if (ch.orbMesh.isInstancedMesh) ch.orbMesh.dispose(); ch.orbMesh = null; } for (const L of ch.marks) if (L.group) this.scene.remove(L.group); }
 
   // ---------- streaming ----------
   update(px, pz, budgetMs = 6) {

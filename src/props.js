@@ -149,7 +149,7 @@ export class Props {
   recenter(cx, cz) { this.center = { x: cx, z: cz }; this.dirty = true; }
   // instanced draw of every intact prop near the player
   rebuild() {
-    this.dirty = false; for (const m of this.meshes) this.scene.remove(m); this.meshes.length = 0;
+    this.dirty = false; for (const m of this.meshes) { this.scene.remove(m); if (m.isInstancedMesh) m.dispose(); } this.meshes.length = 0;
     const R = this.q.propR || 3, groups = new Map(), add = (k, geo, mat, p, sc, shadow) => { let g = groups.get(k); if (!g) groups.set(k, g = { geo, mat, list: [], shadow }); g.list.push([p, sc]); };
     const fol = this.foliage(); this.sigs = [];
     for (const ch of this.chunks) {

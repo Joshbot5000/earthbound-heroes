@@ -20,6 +20,7 @@ import { Props } from './props.js';
 import { Landmarks } from './landmarks.js';
 import { setVehicleLights } from './vehicles.js';
 import { Weapons } from './weapons.js';
+import { Bases } from './bases.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 import { N8AOPass } from 'n8ao';
@@ -71,7 +72,7 @@ async function boot() {
   addEventListener('resize', () => { pendingResize = true; }); addEventListener('orientationchange', () => setTimeout(() => { pendingResize = true; }, 200));
 
   G.audio = new Audio(); G.fx = new FX(scene); G.vfx = new VFX(scene); G.renderer = renderer; G.sky = new SkySystem(scene, renderer, mobile); G.world = new World(scene, q);
-  G.props = new Props(scene, q); G.ents = new Ents(q); G.wanted = new Wanted(); G.ui = new UI(); G.player = new Player(HEROES); G.powers = new Powers(); G.weapons = new Weapons(); G.weapons.select(0);
+  G.props = new Props(scene, q); G.ents = new Ents(q); G.wanted = new Wanted(); G.bases = new Bases(); G.ui = new UI(); G.player = new Player(HEROES); G.powers = new Powers(); G.weapons = new Weapons(); G.weapons.select(0);
   if (qs.get('t')) G.sky.timeOffset = +qs.get('t');
 
   G.setHero = i => { G.player.setHero(i); G.ui.setHero(HEROES[i], i); G.weapons && G.weapons.attachModel(G.weapons.current); };
@@ -85,6 +86,7 @@ async function boot() {
     let city = null;
     if (zone) { try { $('loadMsg').textContent = 'Loading ' + zone.name + '…'; city = await City.load(zone, m => $('loadMsg').textContent = m); } catch (e) { console.warn(e); G.ui && G.ui.toast && G.ui.toast('Real map of ' + zone.name + ' unavailable', 'Using a generated city instead'); } }
     const t0 = performance.now(); G.ents.clear(); G.wanted.clearAll(false); G.world.reset(); G.powers.reset();
+    if (G.bases) { for (const B of G.bases.live.values()) G.bases.drop(B); G.bases.live.clear(); }
     const p = Geo.setOrigin(lat, lon, city ? zone : null); City.attach(city); G.world.setCity(city);
     G.world.loadAll(p.x, p.z);
     // land on the ground or a roof, never inside a building
@@ -138,7 +140,7 @@ async function boot() {
     if (G.state === 'pause' || G.state === 'arsenal') return;
     G.time += dt; const I = G.input; G.ui.poll();
     if (G.state === 'title') { I.mx = I.my = 0; I.lookX = dt * 0.12; I.lookY = (0.12 - G.player.camPitch) * dt; for (const k in I.hit) I.hit[k] = false; }
-    G.player.update(dt); G.weapons.update(dt); G.powers.update(dt); G.ents.update(dt); G.wanted.update(dt); G.props.update(dt); Landmarks.update(dt);
+    G.player.update(dt); G.weapons.update(dt); G.powers.update(dt); G.ents.update(dt); G.bases.update(dt); G.wanted.update(dt); G.props.update(dt); Landmarks.update(dt);
     G.world.update(G.player.pos.x, G.player.pos.z, mobile ? 5 : 7); G.sky.cityGlow = City.inside(G.player.pos.x, G.player.pos.z) ? 1 : Geo.urban(G.player.pos.x, G.player.pos.z); G.sky.update(dt, camera); G.world.setLighting(G.sky.night, G.powers.blackoutT > 0); setVehicleLights(G.sky.night);
     G.fx.update(dt); G.vfx.update(dt); G.audio.frame(dt); if (G.state === 'play') G.ui.frame(dt);
     I.lookX = I.lookY = 0; for (const k in I.hit) I.hit[k] = false;

@@ -121,7 +121,13 @@ export class Weapons {
     if (I.hit.reload && w && this.ammo[w.id] < w.mag && this.reloadT <= 0) this.startReload(w);
     if (this.reloadT > 0) { this.reloadT -= dt; if (this.reloadT <= 0) { this.ammo[w.id] = w.mag; G.audio.click(); } }
     if (w && w.spin) { this.spinV = damp(this.spinV, firing ? 1 : 0, firing ? 1 / w.spin * 2.5 : 3, dt); if (this.held && this.held.userData.spinner) this.held.userData.spinner.rotation.z += this.spinV * dt * 45; if (firing && this.spinV < 0.85) G.audio.spin && G.audio.spin(); }
-    if (w && w.charge) { if (firing && this.ammo[w.id] > 0 && this.reloadT <= 0) { this.chargeT += dt; if (this.held) for (const c of this.held.children) if (c.material === glowMat) c.scale.setScalar(1 + this.chargeT * 2); } else if (this.chargeT >= w.charge && canFire) { this.fire(w); this.chargeT = 0; } else this.chargeT = 0; }
+    if (w && w.charge) {
+      const coils = k => { if (this.held) for (const c of this.held.children) if (c.material === glowMat) c.scale.setScalar(k); };
+      if (this.reloadT <= 0 && this.ammo[w.id] <= 0 && canFire) { this.startReload(w); this.chargeT = 0; coils(1); }
+      else if (firing && this.ammo[w.id] > 0 && this.reloadT <= 0) { this.chargeT += dt; coils(1 + Math.min(1, this.chargeT / w.charge) * 1.2); if (this.chargeT >= w.charge && Math.random() < dt * 8) G.vfx.emit('electric', this.muzzlePos(_a), { n: 1, speed: 2, life: 0.15, size: 0.25, color: 0x9fe8ff }); }
+      else if (this.chargeT >= w.charge && canFire && this.ammo[w.id] > 0 && this.reloadT <= 0) { this.fire(w); this.chargeT = 0; coils(1); }
+      else { this.chargeT = 0; coils(1); }
+    }
     else if (w && canFire && (w.auto ? firing : I.hit.attack) && this.cool <= 0 && this.reloadT <= 0 && (!w.spin || this.spinV > 0.85)) {
       if (this.ammo[w.id] <= 0) { this.startReload(w); } else this.fire(w);
     }
@@ -138,13 +144,13 @@ export class Weapons {
     if (G.ui && G.ui.touch) { const t = this.assistTarget(cam.position, _d, 0.12, w.range || 150); if (t) { _c.copy(t.pos).setY(t.pos.y + 1.2).sub(cam.position).normalize(); _d.lerp(_c, 0.75).normalize(); } }
     return { o: cam.position.clone(), d: _d.clone() };
   }
-  assistTarget(o, d, cone, range) { let best = null, bs = cone; for (const n of G.ents.npcs) { if (n.dead || n.kind === 'ped') continue; _c.copy(n.pos).setY(n.pos.y + 1.2).sub(o); const l = _c.length(); if (l > range) continue; const a = Math.acos(clamp(_c.dot(d) / l, -1, 1)); if (a < bs) { bs = a; best = n; } } return best; }
+  assistTarget(o, d, cone, range) { let best = null, bs = cone; const hh = G.wanted.heli; if (hh && !hh.down) { _c.copy(hh.pos).setY(hh.pos.y - 1.2).sub(o); const l = _c.length(); if (l < Math.max(range, 260)) { const a = Math.acos(clamp(_c.dot(d) / l, -1, 1)); if (a < cone * 1.6) { bs = a; best = { pos: hh.pos, heli: true }; } } } for (const n of G.ents.npcs) { if (n.dead || n.kind === 'ped') continue; _c.copy(n.pos).setY(n.pos.y + 1.2).sub(o); const l = _c.length(); if (l > range) continue; const a = Math.acos(clamp(_c.dot(d) / l, -1, 1)); if (a < bs) { bs = a; best = n; } } return best; }
   // what does a ray hit first: building/terrain, a person, a car, the helicopter, a prop, the water
   trace(o, d, max, skip) {
     G.world.raycast(o, d, max, hitW); let best = { t: hitW.hit ? hitW.t : max, type: hitW.hit ? 'world' : 'none', n: { x: hitW.nx, y: hitW.ny, z: hitW.nz } };
     for (const n of G.ents.npcs) { if (n.dead || (skip && skip.has(n))) continue; const s = n.rig.root.scale.x; const t = rayCapsule(o, d, n.pos.x, n.pos.y, n.pos.y + 1.8 * s, n.pos.z, 0.42 * s, best.t); if (t >= 0 && t < best.t) best = { t, type: 'npc', ent: n }; }
     for (const c of G.ents.cars) { if (c === G.player.car || (skip && skip.has(c))) continue; if (c.pos.distanceToSquared(o) > (best.t + 8) ** 2) continue; const t = rayCar(o, d, c, best.t); if (t >= 0 && t < best.t) best = { t, type: 'car', ent: c }; }
-    const h = G.wanted.heli; if (h && !h.down) { _c.subVectors(h.pos, o); const tc = _c.dot(d); if (tc > 0 && tc < best.t && _c.lengthSq() - tc * tc < 12) best = { t: tc, type: 'heli' }; }
+    const h = G.wanted.heli; if (h && !h.down) { _c.subVectors(h.pos, o); const tc = _c.dot(d); if (tc > 0 && tc < best.t + 8 && _c.lengthSq() - tc * tc < 6.5 * 6.5) best = { t: Math.max(0, tc - 3), type: 'heli' }; }
     // water surface
     if (d.y < -1e-3 && o.y > 0) { const tw = -o.y / d.y; if (tw < best.t && Geo.height(o.x + d.x * tw, o.z + d.z * tw) < -0.3) best = { t: tw, type: 'water' }; }
     // props along the ray (lamps, bins, trees)
@@ -230,6 +236,12 @@ export class Weapons {
     G.vfx.beam('energy', a, b, { n: 10, jitter: L * 0.05, width: 0.06, color: 0xdff6ff, core: 0xffffff, life: 0.16 });
     for (let k = 0; k < 2; k++) { const s = _c.lerpVectors(a, b, 0.3 + Math.random() * 0.4).clone(), e = s.clone().add(_a.set(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).multiplyScalar(L * 0.35)); G.vfx.beam('energy', s, e, { n: 6, jitter: L * 0.04, width: 0.07, color: 0x7fc8ff, core: 0xdff6ff, life: 0.12 }); }
   }
+  // shells and missiles fired AT the player (tanks, the helicopter): same flight and blast, but they also hit you
+  enemyShot(from, to, w) {
+    const dir = new THREE.Vector3().subVectors(to, from).normalize(), m = this.rocketMesh(!!w.shell); m.position.copy(from); m.lookAt(_a.copy(from).add(dir)); G.scene.add(m);
+    if (w.shell) m.scale.set(1.3, 1.3, 0.8);
+    this.projectiles.push({ w: { ...w, enemy: true }, m, vel: dir.multiplyScalar(w.speed), life: 5, bounces: 0, age: 0.3, prev: from.clone(), enemy: true });
+  }
   rocketMesh(small) {
     if (!this.rocketParts) {
       const body = new THREE.CylinderGeometry(0.055, 0.055, 0.5, 12).rotateX(Math.PI / 2), nose = new THREE.ConeGeometry(0.055, 0.2, 12).rotateX(Math.PI / 2).translate(0, 0, 0.35), fin = new THREE.BoxGeometry(0.006, 0.16, 0.12).translate(0, 0.09, -0.2);
@@ -263,7 +275,7 @@ export class Weapons {
     } else if (h.type === 'car') {
       const c = h.ent; c.damage(dmg * 0.45, h.p.x, h.p.z); c.vel.addScaledVector(d, (w.knock || 1) * 0.6 * 1400 / c.spec.mass); if (c.ai === 'traffic' || c.ai === 'road') { c.ai = 'none'; c.touched = true; c.vel.set(Math.sin(c.yaw) * c.vf, 0, Math.cos(c.yaw) * c.vf); }
       G.vfx.emit('spark', h.p, { n: 8, speed: 7, life: 0.3, size: 0.07 }); G.audio.ping && G.audio.ping(h.p); if (c.police) G.wanted.crime(0.25); G.ui.hitmarker(false, false);
-    } else if (h.type === 'heli') { G.wanted.hitHeli(dmg * 0.35); G.fx.burst(h.p, 0xffe0a0, 8, 6, 0.3, 0.6, 10); G.ui.hitmarker(false, false); }
+    } else if (h.type === 'heli') { G.wanted.hitHeli(dmg * 0.6); G.vfx.emit('spark', h.p, { n: 10, speed: 8, life: 0.35, size: 0.12 }); G.ui.hitmarker(!!(G.wanted.heli && G.wanted.heli.down), false); G.audio.ping && G.audio.ping(h.p); }
     else if (h.type === 'prop') { const q = h.ent; if (q.m < dmg * 4) G.props.knock(q, _c.copy(d).multiplyScalar(dmg * 0.12), h.p); G.fx.burst(h.p, 0xffe0a0, 5, 4, 0.2, 0.5, 10, 0.05); }
     else if (h.type === 'water') G.fx.burst(h.p, 0xdff0ff, 10, 3, 0.6, 0.9, 12, 0.2, _c.set(0, 5, 0));
     else if (h.type === 'world') {
@@ -277,9 +289,9 @@ export class Weapons {
   marker(n, head) { G.ui.hitmarker(n.dead, head); if (n.dead && !n.counted) { n.counted = true; G.ui.killfeed && G.ui.killfeed(n, head); } }
   explode(p, w) {
     G.fx.explosion(p, w.blast / 8); G.ents.blast(p, w.blast, w.dmg, 13, null);
-    const h = G.wanted.heli; if (h && h.pos.distanceTo(p) < w.blast + 4) G.wanted.hitHeli(w.dmg);
-    if (G.ents.nearest(p, 80, n => n.kind === 'cop')) G.wanted.crime(1);
-    const d = G.player.pos.distanceTo(p); if (d < w.blast && G.player.mode === 'foot') { G.player.damage(w.dmg * 0.35 * (1 - d / w.blast)); G.player.vel.addScaledVector(_a.subVectors(G.player.pos, p).normalize(), 12); }
+    const h = G.wanted.heli; if (h && !h.down && h.pos.distanceTo(p) < w.blast + 7) G.wanted.hitHeli(w.dmg * 1.2);
+    if (!w.enemy && G.ents.nearest(p, 80, n => n.kind === 'cop')) G.wanted.crime(1);
+    const d = G.player.pos.distanceTo(p); if (d < w.blast && G.player.mode === 'foot') { G.player.damage(w.dmg * (w.enemy ? 0.7 : 0.35) * (1 - d / w.blast)); G.player.vel.addScaledVector(_a.subVectors(G.player.pos, p).normalize(), 12); }
   }
   updateProjectiles(dt) {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -292,6 +304,7 @@ export class Weapons {
         const sp = P.vel.length(); if (sp < P.w.speed) P.vel.multiplyScalar(Math.min(P.w.speed, sp + 160 * dt) / sp); }
       const step = P.vel.length() * dt, dir = _b.copy(P.vel).normalize();
       let h = this.trace(m.position, dir, step + 0.3);
+      if (P.enemy && h.type === 'none') { const pp = G.player.pos, cx = pp.x - m.position.x, cy = pp.y + 1 - m.position.y, cz = pp.z - m.position.z, tt = clamp((cx * dir.x + cy * dir.y + cz * dir.z), 0, step); if ((cx - dir.x * tt) ** 2 + (cy - dir.y * tt) ** 2 + (cz - dir.z * tt) ** 2 < 2.2 * 2.2) h = { type: 'player', t: tt, n: { x: 0, y: 1, z: 0 }, p: new THREE.Vector3().copy(m.position).addScaledVector(dir, tt) }; }
       // never let a fast projectile tunnel through the ground between frames
       const gy = G.world.groundAt(m.position.x + dir.x * step, m.position.z + dir.z * step);
       if (h.type === 'none' && m.position.y + dir.y * step < gy + 0.08) h = { type: 'world', t: step, n: { x: 0, y: 1, z: 0 }, p: new THREE.Vector3().copy(m.position).addScaledVector(dir, step).setY(gy + 0.08) };

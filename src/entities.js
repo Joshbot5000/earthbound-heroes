@@ -1,9 +1,9 @@
 // Everything that moves besides the player: traffic, civilians, the Syndicate, police cars,
 // officers, the police helicopter, and the wanted system that ties them together.
 import * as THREE from 'three';
-import { G, clamp, lerp, damp, angDiff, TAU } from './util.js';
+import { freeTree, G, clamp, lerp, damp, angDiff, TAU } from './util.js';
 import { Geo, BLOCK, CH } from './geo.js';
-import { makeRig, animateRig, tintRig, makeHeli, civilianLook, copLook, thugLook } from './rig.js';
+import { makeRig, animateRig, tintRig, makeHeli, civilianLook, copLook, thugLook, soldierLook } from './rig.js';
 import { makeVehicle, dent } from './vehicles.js';
 import { City, ROAD_W, DRIVABLE, BASE } from './city.js';
 import { region } from './regions.js';
@@ -204,14 +204,16 @@ export class Car {
     else this.drive(dt, 0, 0, this.grounded && !this.occupied && Math.abs(this.vf) < 3);
   }
   snapToLane() { const d = DIRS[this.dir]; if (d[0]) this.pos.z = roadLine(this.pos.z) + d[0] * LANE; else this.pos.x = roadLine(this.pos.x) - d[1] * LANE; this.plan = null; this.sinceTurn = 99; }
-  remove() { G.scene.remove(this.m.root); }
+  remove() { G.scene.remove(this.m.root); freeTree(this.m.root); }
 }
 
 // ================= people =================
 export class NPC {
   constructor(kind, x, z, heavy) {
-    this.kind = kind; this.heavy = heavy; this.rig = makeRig(kind === 'ped' ? civilianLook(G.ents.regKey) : kind === 'cop' ? copLook(G.ents.regKey) : thugLook(heavy)); G.scene.add(this.rig.root);
-    this.pos = V().set(x, G.world.groundAt(x, z), z); this.vel = V(); this.yaw = Math.random() * TAU; this.hp = this.maxHp = heavy ? 220 : kind === 'ped' ? 40 : kind === 'thug' ? 90 : 80;
+    // soldiers are armed police in behaviour, with army kit, more health and harder-hitting rifles
+    this.soldier = heavy === 'soldier'; if (this.soldier) heavy = false;
+    this.kind = kind; this.heavy = heavy; this.rig = makeRig(this.soldier ? soldierLook() : kind === 'ped' ? civilianLook(G.ents.regKey) : kind === 'cop' ? copLook(G.ents.regKey) : thugLook(heavy)); G.scene.add(this.rig.root);
+    this.pos = V().set(x, G.world.groundAt(x, z), z); this.vel = V(); this.yaw = Math.random() * TAU; this.hp = this.maxHp = this.soldier ? 150 : heavy ? 220 : kind === 'ped' ? 40 : kind === 'thug' ? 90 : 80;
     this.state = 'walk'; this.t = 0; this.cool = 1 + Math.random(); this.gun = kind === 'cop' || (kind === 'thug' && !heavy && Math.random() < 0.35);
     this.frozen = 0; this.webbed = 0; this.infected = 0; this.gen = 0; this.burning = 0; this.dead = false; this.deadT = 0; this.punch = 0; this.side = 1; this.grounded = true;
     this.axis = Math.random() < 0.5 ? 0 : 1; this.sgn = Math.random() < 0.5 ? 1 : -1; if (this.gun && G.weapons) G.weapons.armNPC(this); this.hostile = kind === 'thug'; this.gang = null; this.fx = x; this.fz = z + 1; this.shell = null; this.anim = {};
@@ -247,7 +249,8 @@ export class NPC {
     const from = _a.copy(this.pos).setY(this.pos.y + 1.4), to = _b.copy(target.pos).setY(target.pos.y + 1.1);
     const sp = target.vel ? target.vel.length() : 0, hitc = clamp(0.8 - sp * 0.028, 0.08, 0.8);
     const ok = Math.random() < hitc; if (!ok) to.add(_c.set(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).multiplyScalar(4));
-    G.fx.line(from.clone(), to.clone(), 0xffe9a0, 0.03, 0.09); G.fx.burst(from, 0xffd070, 3, 2, 0.08, 1.4); G.audio.shot(this.pos);
+    G.vfx.tracer(from, to, 0xffd890, 0.035); G.vfx.emit('glow', from, { n: 1, speed: 0, life: 0.06, size: 0.6, color: 0xffc070 }); G.audio.shot(this.pos);
+    if (this.soldier) dmg *= 1.5;
     if (ok) { if (target === G.player) G.player.damage(dmg, this.pos); else target.hit(dmg, null, 0, 'npc'); }
     this.aimT = 0.4;
   }
@@ -405,11 +408,11 @@ export class Ents {
       const traffic = this.cars.filter(c => c.ai === 'traffic' || c.ai === 'road').length, peds = this.npcs.filter(n => n.kind === 'ped').length;
       if (urban && traffic < this.q.cars * (real ? 1.4 : 1)) { const s = real ? this.cityRoadSpot(60, 180) : this.roadSpot(70, 190); if (s) this.addCar(this.carType(), PAINT[Math.random() * PAINT.length | 0], false, s); }
       if (urban && peds < this.q.peds * (real ? 1.5 : 1)) { const s = real ? this.cityWalkSpot(30, 110) : this.walkSpot(35, 120); if (s) { const n = this.addNPC('ped', s.x, s.z); if (s.e !== undefined) n.path = { e: s.e, dir: s.dir, s: s.s, side: s.side }; } }
-      for (let i = this.cars.length - 1; i >= 0; i--) { const c = this.cars[i], d = Math.hypot(c.pos.x - pl.x, c.pos.z - pl.z); if (c !== G.player.car && (d > (real ? 230 : 260) || (c.dead && c.deadT > 25) || (c.ai === 'none' && !c.touched && d > 140))) { c.remove(); this.cars.splice(i, 1); } }
-      for (let i = this.npcs.length - 1; i >= 0; i--) { const n = this.npcs[i], d = Math.hypot(n.pos.x - pl.x, n.pos.z - pl.z); if (d > (n.kind === 'thug' ? 260 : 190) || (n.dead && n.deadT > 9) || (n.kind === 'cop' && G.wanted.level === 0 && d > 70)) { n.remove(); this.npcs.splice(i, 1); } }
+      for (let i = this.cars.length - 1; i >= 0; i--) { const c = this.cars[i], d = Math.hypot(c.pos.x - pl.x, c.pos.z - pl.z); if (c.base && d < 1600 && !(c.dead && c.deadT > 25)) continue; if (c !== G.player.car && (d > (real ? 230 : 260) || (c.dead && c.deadT > 25) || (c.ai === 'none' && !c.touched && d > 140))) { c.remove(); this.cars.splice(i, 1); } }
+      for (let i = this.npcs.length - 1; i >= 0; i--) { const n = this.npcs[i], d = Math.hypot(n.pos.x - pl.x, n.pos.z - pl.z); if (n.base && d < 1600 && !(n.dead && n.deadT > 30)) continue; if (d > (n.kind === 'thug' ? 260 : 190) || (n.dead && n.deadT > 9) || (n.kind === 'cop' && G.wanted.level === 0 && d > 70)) { n.remove(); this.npcs.splice(i, 1); } }
       for (let i = this.gangs.length - 1; i >= 0; i--) { const g = this.gangs[i], alive = g.members.filter(m => !m.dead && this.npcs.includes(m)); if (!alive.length) { if (g.members.some(m => m.dead)) G.onGangCleared(); this.gangs.splice(i, 1); } else { g.x = alive[0].pos.x; g.z = alive[0].pos.z; } }
     }
-    this.gangT -= dt; if (this.gangT <= 0 && urban) { this.gangT = 45 + Math.random() * 40; if (!this.gangs.length && G.wanted.level < 3) this.spawnGang(); }
+    this.gangT -= dt; if (this.gangT <= 0 && urban) { this.gangT = 22 + Math.random() * 20; if (this.gangs.length < 2 && G.wanted.level < 4) this.spawnGang(); }
     for (const c of this.cars) c.update(dt);
     for (const n of this.npcs) n.update(dt);
     // car against car, and cars against people
@@ -478,6 +481,8 @@ export class Wanted {
   }
   driveCop(c, dt) {
     const pl = G.player, tgt = this.seen ? pl.pos : this.last, d = c.pos.distanceTo(tgt);
+    if (c.m.tank) { this.tankAI(c, dt, tgt, d); return; }
+    if (c.type === 'army_truck' && d < 30 && c.occupied) { c.occupied = false; c.ai = 'none'; c.touched = true; c.vel.multiplyScalar(0.3); for (let i = 0; i < 4; i++) { const n = G.ents.addNPC('cop', c.pos.x - Math.sin(c.yaw) * (4 + i), c.pos.z - Math.cos(c.yaw) * (4 + i), 'soldier'); n.canSee = true; } G.ui.toast('Soldiers deployed'); return; }
     if (pl.mode === 'foot' && d < 16 && Math.abs(c.vf) < 7 && c.occupied) {         // officers get out
       c.occupied = false; c.ai = 'none'; c.touched = true;
       for (const s of [-1, 1]) { const n = G.ents.addNPC('cop', c.pos.x + Math.cos(c.yaw) * 1.8 * s, c.pos.z - Math.sin(c.yaw) * 1.8 * s); n.canSee = true; }
@@ -502,24 +507,43 @@ export class Wanted {
     else { this.unseen += dt; if (this.unseen > 5) { this.state = 'search'; this.searchT += dt; if (this.searchT > 16 + this.level * 4) { this.clearAll(); return; } } }
     // reinforcements arrive by road, out of sight where possible
     this.spawnT -= dt; const units = E.cars.filter(c => c.ai === 'cop').length + E.npcs.filter(n => n.kind === 'cop' && !n.dead).length / 2;
-    if (this.spawnT <= 0 && units < this.level + (this.level > 2 ? 1 : 0)) {
+    if (this.spawnT <= 0 && units < this.level * 1.5 + (this.level > 2 ? 1 : 0)) {
       this.spawnT = 3.5; let s = City.inside(pl.pos.x, pl.pos.z) ? E.cityRoadSpot(110, 190) : E.roadSpot(110, 190);
       if (!s) { const a = Math.random() * TAU; s = { x: pl.pos.x + Math.sin(a) * 150, z: pl.pos.z + Math.cos(a) * 150, dir: 0 }; if (Geo.height(s.x, s.z) < 0.5) s = null; }
-      if (s) { const reg = E.regKey, c = E.addCar(this.level > 3 ? 'sport' : reg === 'india' || reg === 'gulf' ? 'suv' : reg === 'uk' ? 'hatch' : 'sedan', 0xf4f4f0, true, s); c.ai = 'cop'; c.hp = 140; c.yaw = Math.atan2(pl.pos.x - s.x, pl.pos.z - s.z); }
+      if (s) { const reg = E.regKey, tanks = E.cars.filter(c => c.ai === 'cop' && c.m.tank && !c.dead).length, r = Math.random();
+        const type = this.level >= 5 && tanks < 2 && r < 0.5 ? 'tank' : this.level >= 4 && r < 0.45 ? 'army_truck' : this.level >= 3 && r < 0.5 ? 'swat' : this.level > 3 ? 'sport' : reg === 'india' || reg === 'gulf' ? 'suv' : reg === 'uk' ? 'hatch' : 'sedan';
+        const c = E.addCar(type, 0xf4f4f0, type === 'tank' || type === 'army_truck' ? false : type === 'swat' ? false : true, s); c.ai = 'cop'; c.hp = type === 'tank' ? 1400 : type === 'army_truck' ? 400 : type === 'swat' ? 500 : 140; c.yaw = Math.atan2(pl.pos.x - s.x, pl.pos.z - s.z);
+        if (type === 'tank' || type === 'army_truck') G.ui.toast(type === 'tank' ? 'TANK INCOMING' : 'The army has been called in', type === 'tank' ? 'Use rockets, the railgun or your powers' : 'Soldiers on the way'); }
     }
-    if (this.level >= 4 && !this.heli) this.spawnHeli();
+    this.heliCool = (this.heliCool || 0) - dt; if (this.level >= 4 && !this.heli && this.heliCool <= 0) this.spawnHeli();
     if (this.heli) this.updateHeli(dt);
+  }
+  // a tank drives at you, its turret tracking you, and fires a shell every few seconds when it has a line of sight
+  tankAI(c, dt, tgt, d) {
+    const pl = G.player; c.pursue(dt, tgt, d > 40 ? 16 : 4);
+    const t = c.m.turret, want = Math.atan2(pl.pos.x - c.pos.x, pl.pos.z - c.pos.z) - c.yaw; t.rotation.y += angDiff(t.rotation.y, want) * Math.min(1, 1.4 * dt);
+    const elev = Math.atan2(pl.pos.y + 1 - (c.pos.y + 2.3), Math.max(5, d)); c.m.gun.rotation.x = -clamp(elev, -0.15, 0.4);
+    c.fireT = (c.fireT ?? 3) - dt;
+    if (c.fireT <= 0 && this.seen && d < 220 && Math.abs(angDiff(t.rotation.y, want)) < 0.12) {
+      c.fireT = 4 + Math.random() * 2; c.m.gun.updateMatrixWorld(true); const muzzle = c.m.gun.localToWorld(new THREE.Vector3(0, 0, 5.6));
+      const aim = pl.pos.clone().setY(pl.pos.y + 0.8).addScaledVector(pl.vel, d / 95 * 0.6);
+      G.weapons.enemyShot(muzzle, aim, { kind: 'rocket', speed: 95, blast: 8, dmg: 75, shell: true });
+      G.vfx.emit('fire', muzzle, { n: 10, speed: 4, life: 0.2, size: 1.4 }); G.vfx.emit('smoke', muzzle, { n: 10, speed: 3, life: 2.5, size: 1.6 }); G.fx.flash(muzzle, 0xffb060, 120, 0.15); G.shake = Math.max(G.shake, 0.4 * Math.max(0, 1 - d / 120)); G.audio.boom && G.audio.boom(muzzle, 0.5);
+      c.vel.addScaledVector(_a.set(Math.sin(c.yaw + t.rotation.y), 0, Math.cos(c.yaw + t.rotation.y)), -1.5);
+    }
   }
   spawnHeli() { const h = makeHeli(); G.scene.add(h.root); this.heli = { m: h, pos: h.root.position, vel: V(), cool: 2, down: false, leave: false, hp: 120 }; this.heli.pos.copy(G.player.pos).add(_a.set(200, 120, 200)); }
   updateHeli(dt) {
     const h = this.heli, pl = G.player; h.m.rotor.rotation.y += dt * 30;
-    if (h.down) { h.vel.y -= 14 * dt; h.pos.addScaledVector(h.vel, dt); h.m.root.rotation.y += dt * 5; h.m.root.rotation.z += dt; if (h.pos.y < Geo.height(h.pos.x, h.pos.z) + 1) { G.fx.explosion(h.pos.clone(), 2); G.ents.blast(h.pos, 14, 80, 14); G.scene.remove(h.m.root); this.heli = null; } return; }
+    if (h.down) { h.vel.y -= 14 * dt; h.pos.addScaledVector(h.vel, dt); h.m.root.rotation.y += dt * 5; h.m.root.rotation.z += dt; if (h.pos.y < Geo.height(h.pos.x, h.pos.z) + 1) { G.fx.explosion(h.pos.clone(), 2); G.ents.blast(h.pos, 14, 80, 14); G.scene.remove(h.m.root); freeTree(h.m.root); this.heli = null; this.heliCool = 35; } else { G.vfx.emit('fire', h.pos, { n: 2, speed: 2, life: 0.5, size: 1.6 }); G.vfx.emit('smoke', h.pos, { n: 2, speed: 2, life: 2.5, size: 2 }); } return; }
     const tgt = _a.copy(this.seen ? pl.pos : this.last); tgt.y = Math.max(tgt.y + 55, Geo.height(tgt.x, tgt.z) + 70); if (h.leave) tgt.set(h.pos.x + 400, h.pos.y + 200, h.pos.z);
     _b.subVectors(tgt, h.pos); const d = _b.length(); h.vel.lerp(_b.multiplyScalar(Math.min(1, 34 / (d || 1))), 1 - Math.exp(-1.2 * dt)); h.pos.addScaledVector(h.vel, dt);
     h.m.root.rotation.y = Math.atan2(pl.pos.x - h.pos.x, pl.pos.z - h.pos.z); h.m.beam.lookAt(pl.pos); h.m.beam.rotateX(Math.PI / 2); h.m.beam.visible = G.sky.night > 0.3;
     G.audio.heli(h.pos.distanceTo(pl.pos));
-    if (h.leave && h.pos.distanceTo(pl.pos) > 500) { G.scene.remove(h.m.root); this.heli = null; G.audio.heli(1e9); return; }
-    h.cool -= dt; if (!h.leave && this.level >= 5 && this.seen && h.cool <= 0) { h.cool = 0.25 + (Math.random() < 0.2 ? 2 : 0); NPC.prototype.shoot.call({ pos: h.pos, kind: 'cop' }, pl, 4); }
+    if (h.leave && h.pos.distanceTo(pl.pos) > 500) { G.scene.remove(h.m.root); freeTree(h.m.root); this.heli = null; G.audio.heli(1e9); return; }
+    if (h.hp < 70 && Math.random() < dt * 12) G.vfx.emit('smoke', h.pos, { n: 1, speed: 1, life: 2, size: 1.4, color: 0x222222 });
+    h.cool -= dt; if (!h.leave && this.level >= 4 && this.seen && h.cool <= 0) { h.cool = 0.3 + (Math.random() < 0.2 ? 2 : 0); NPC.prototype.shoot.call({ pos: h.pos, kind: 'cop' }, pl, 3 + (this.level - 4) * 2); }
+    h.rkt = (h.rkt ?? 6) - dt; if (!h.leave && this.level >= 5 && this.seen && h.rkt <= 0) { h.rkt = 7 + Math.random() * 3; for (const s of [-1, 1]) G.weapons.enemyShot(h.pos.clone().add(_a.set(s * 2, -1.5, 0)), pl.pos.clone().setY(pl.pos.y + 0.5).add(_b.set((Math.random() - 0.5) * 6, 0, (Math.random() - 0.5) * 6)), { kind: 'rocket', speed: 70, blast: 7, dmg: 60 }); G.ui.toast('Incoming missiles!'); }
   }
-  hitHeli(dmg) { const h = this.heli; if (!h || h.down) return; h.hp -= dmg; if (h.hp <= 0) { h.down = true; G.fx.explosion(h.pos.clone(), 1); G.ui.toast('Helicopter down'); this.crime(3); } }
+  hitHeli(dmg) { const h = this.heli; if (!h || h.down) return; h.hp -= dmg; G.ui.toast && h.hp > 0 && h.hp < 60 && !h.warned && (h.warned = true, G.ui.toast('Helicopter is smoking', 'Keep firing!')); if (h.hp <= 0) { h.down = true; G.fx.explosion(h.pos.clone(), 1); G.ui.toast('Helicopter down'); this.crime(3); } }
 }

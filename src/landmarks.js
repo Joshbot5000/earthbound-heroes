@@ -557,6 +557,8 @@ function built(I) {
 let cacheKey = null, inst = [];
 function instances() {
   const k = Geo.ox + ',' + Geo.oz + ',' + Geo.band; if (k === cacheKey) return inst;
+  // a new origin (travel): free the old landmark meshes before building the new set
+  for (const I of inst) if (I.built) { I.built.g.parent && I.built.g.parent.remove(I.built.g); live.delete(I.built.g); I.built.g.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
   cacheKey = k; inst = [];
   for (const d of LANDMARKS) {
     let x = d.lon * M * Geo.cosB - Geo.ox * CH, z = -d.lat * M - Geo.oz * CH;

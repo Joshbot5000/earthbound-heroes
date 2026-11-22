@@ -35,3 +35,6 @@ export function fbm(x, y, oct = 4) {
   return s;
 }
 export const isTouch = () => matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+
+// free the GPU buffers of everything under obj (geometry re-uploads automatically if a shared one is used again)
+export function freeTree(obj, mats = false) { obj.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); if (mats && o.material) [].concat(o.material).forEach(m => m.dispose()); }); }

@@ -35,6 +35,12 @@ const TYPES = {
     body: [[-5.6, 1.22, 0.4, 4.25], [-5.55, 1.27, 0.32, 4.35], [5.45, 1.27, 0.32, 4.35], [5.6, 1.22, 0.4, 4.25]], cab: null },
   bus_mumbai: { len: 11, w: 2.5, mass: 11000, max: 22, acc: 4, wheel: 0.52, wb: 3.1, track: 1.02, fixedColor: 0xb3141c, stripe: 0xe8dcc0, bus: 1,
     body: [[-5.5, 1.2, 0.45, 3.0], [-5.45, 1.25, 0.38, 3.1], [5.35, 1.25, 0.38, 3.1], [5.5, 1.2, 0.45, 3.0]], cab: null },
+  swat: { len: 5.6, w: 2.3, mass: 6200, max: 34, acc: 9, wheel: 0.52, wb: 1.75, track: 0.98, fixedColor: 0x15181c,
+    body: [[-2.8, 1.08, 0.62, 1.5], [-2.75, 1.13, 0.55, 1.58], [1.4, 1.13, 0.55, 1.58], [2.45, 1.12, 0.58, 1.5], [2.8, 1.05, 0.65, 1.25]],
+    cab: [[-2.75, 1.5], [-2.7, 2.6], [1.3, 2.6], [2.25, 1.5]], cabW: [1.1, 1.05], panel: false, armour: true },
+  army_truck: { len: 7.4, w: 2.5, mass: 9000, max: 30, acc: 7, wheel: 0.6, wb: 2.4, track: 1.05, fixedColor: 0x4a5532, truck: true,
+    body: [[-3.7, 1.2, 0.8, 1.5], [-3.65, 1.25, 0.75, 1.55], [1.6, 1.25, 0.75, 1.55], [2.2, 1.2, 0.8, 2.6], [3.6, 1.15, 0.85, 2.55], [3.7, 1.08, 0.9, 1.6]], cab: null },
+  tank: { len: 9.8, w: 3.7, mass: 60000, max: 17, acc: 5, wheel: 0.45, wb: 3.4, track: 1.45, fixedColor: 0x5a6340, tank: true, body: [[-4.9, 1.8, 0.5, 1.9], [4.9, 1.8, 0.5, 1.9]], cab: null },
   rickshaw: { len: 2.75, w: 1.35, mass: 420, max: 15, acc: 5, wheel: 0.24, wb: 0.95, track: 0.58, fixedColor: 0x161616, roofColor: 0xf0c020, rick: true,
     body: [[-1.3, 0.6, 0.3, 0.75], [-1.2, 0.66, 0.24, 0.9], [0.2, 0.66, 0.24, 0.88], [0.9, 0.42, 0.26, 0.85], [1.35, 0.25, 0.3, 0.9]], cab: null },
 };
@@ -106,6 +112,7 @@ function battenburg(a, b) {
 export function setVehicleLights(night) { const m = M(); m.head.emissiveIntensity = 0.2 + night * 5; m.tail.emissiveIntensity = 0.3 + night * 2.5; m.beam.opacity = 0.05 * night; }
 
 export function makeVehicle(type, color, police, regKey) {
+  if (type === 'tank') return makeTank();
   const d = TYPES[type] || TYPES.sedan, m = M(), root = new THREE.Group(), tilt = new THREE.Group(); root.add(tilt);
   const paintCol = police ? (police === 'us' ? 0x111214 : 0xf4f4f0) : d.fixedColor ?? color;
   const dark = new THREE.Color(paintCol).getHSL({}).l < 0.15, paint = new THREE.MeshPhysicalMaterial({ color: paintCol, roughness: dark ? 0.32 : 0.3, metalness: dark ? 0.1 : 0.35, clearcoat: 1, clearcoatRoughness: 0.05 });
@@ -130,6 +137,13 @@ export function makeVehicle(type, color, police, regKey) {
     add(new THREE.BoxGeometry(d.w + 0.02, 0.22, d.len - 0.3), m.dark, 0, 0.5, 0);
     add(new THREE.BoxGeometry(1.4, 0.3, 0.03), new THREE.MeshBasicMaterial({ color: 0xffa020 }), 0, hb - 0.3, L + 0.01);
   }
+  if (d.truck) {
+    // canvas-covered cargo bed behind the cab, olive drab
+    const cov = new THREE.CylinderGeometry(1.25, 1.25, 4.6, 16, 1, false, -Math.PI / 2, Math.PI); cov.rotateX(Math.PI / 2); cov.scale(1, 0.75, 1); cov.translate(0, 2.2, -1.2);
+    add(cov, new THREE.MeshStandardMaterial({ color: 0x5a6040, roughness: 0.95 }), 0, 0, 0, true); add(new THREE.BoxGeometry(2.4, 1.0, 4.7), paint, 0, 1.55, -1.2, true);
+    add(new THREE.BoxGeometry(2.3, 0.08, 0.9), m.glass, 0, 2.2, 2.25); add(new THREE.BoxGeometry(2.45, 0.3, 0.3), m.dark, 0, 0.75, 3.7);
+  }
+  if (d.armour) { add(new THREE.BoxGeometry(2.0, 0.08, 1.6), m.glass, 0, 2.2, 1.7); for (const s of [-1, 1]) for (const z of [-1.5, 0]) add(new THREE.BoxGeometry(0.02, 0.35, 0.6), m.glass, s * 1.14, 2.1, z); add(new THREE.BoxGeometry(2.3, 0.35, 0.3), m.dark, 0, 0.8, 2.85); }
   if (d.rick) {
     // canopy over the passenger bench, open sides
     const cg = new THREE.CylinderGeometry(0.66, 0.66, 1.9, 16, 1, true, -Math.PI / 2, Math.PI); cg.rotateX(Math.PI / 2); cg.scale(1, 0.55, 1); cg.translate(0, 1.42, -0.2);
@@ -178,6 +192,28 @@ export function makeVehicle(type, color, police, regKey) {
   // headlight beams for night driving
   const beam = new THREE.Mesh(new THREE.ConeGeometry(3.2, 16, 14, 1, true).translate(0, -8, 0).rotateX(-Math.PI / 2 - 0.08), m.beam); beam.position.set(0, fy, fz); tilt.add(beam); beam.visible = false;
   return { root, tilt, wheels, steer, paint, bar, spec: d, body, beam, base: bodyGeo.attributes.position.array.slice() };
+}
+// a main battle tank: angled hull, road wheels inside track skirts, a turret with a long gun that tracks you
+function makeTank() {
+  const d = TYPES.tank, m = M(), root = new THREE.Group(), tilt = new THREE.Group(); root.add(tilt);
+  const paint = new THREE.MeshStandardMaterial({ color: d.fixedColor, roughness: 0.75, metalness: 0.25 }), dark = new THREE.MeshStandardMaterial({ color: 0x23251e, roughness: 0.9 });
+  const add = (g, mat, x, y, z, parent = tilt) => { const o = new THREE.Mesh(g, mat); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; parent.add(o); return o; };
+  // hull: a box with a sloped glacis plate, built as a lofted shape so it dents like a car body
+  const hull = new THREE.BoxGeometry(3.3, 1.1, 9.4, 4, 2, 8); const hp = hull.attributes.position;
+  for (let i = 0; i < hp.count; i++) { const z = hp.getZ(i), y = hp.getY(i); if (z > 3.2 && y > 0) hp.setZ(i, z - (z - 3.2) * 0.9); if (z > 4 && y < 0) hp.setY(i, y + 0.25); }
+  hull.computeVertexNormals(); const body = add(hull, paint, 0, 1.25, 0);
+  for (const s of [-1, 1]) { add(new THREE.BoxGeometry(0.7, 1.0, 9.6), dark, s * 1.65, 0.6, 0); add(new THREE.BoxGeometry(0.08, 0.55, 9.2), paint, s * 2.0, 1.25, 0); }
+  const wheels = []; const rw = new THREE.CylinderGeometry(0.42, 0.42, 0.5, 14).rotateZ(Math.PI / 2);
+  for (const s of [-1, 1]) for (let i = 0; i < 7; i++) { const w = new THREE.Group(); w.position.set(s * 1.65, 0.45, -3.6 + i * 1.2); w.add(new THREE.Mesh(rw, dark)); root.add(w); wheels.push(w); }
+  // turret and gun
+  const turret = new THREE.Group(); turret.position.set(0, 1.85, -0.4); tilt.add(turret);
+  const tg = new THREE.CylinderGeometry(1.5, 1.85, 0.85, 8); tg.scale(1, 1, 1.35); add(tg, paint, 0, 0.42, 0, turret);
+  const gun = new THREE.Group(); gun.position.set(0, 0.45, 1.6); turret.add(gun);
+  add(new THREE.CylinderGeometry(0.13, 0.16, 5.4, 10).rotateX(Math.PI / 2).translate(0, 0, 2.7), m.dark, 0, 0, 0, gun); add(new THREE.CylinderGeometry(0.22, 0.22, 0.6, 10).rotateX(Math.PI / 2).translate(0, 0, 5.2), m.dark, 0, 0, 0, gun);
+  add(new THREE.CylinderGeometry(0.35, 0.35, 0.4, 10), dark, 0.55, 0.95, -0.4, turret); add(new THREE.BoxGeometry(0.1, 0.6, 0.1), m.dark, -0.7, 1.15, -1.0, turret);
+  const sh = new THREE.Mesh(new THREE.PlaneGeometry(5, 12), m.shadow); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.04; sh.renderOrder = -1; root.add(sh);
+  const beam = new THREE.Object3D(); tilt.add(beam);
+  return { root, tilt, wheels, steer: [], paint, bar: null, spec: d, body, beam, base: hull.attributes.position.array.slice(), turret, gun, tank: true };
 }
 // push the body in around a local impact point
 export function dent(v, lx, ly, lz, depth) {

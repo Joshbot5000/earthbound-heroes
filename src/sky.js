@@ -76,8 +76,9 @@ export class SkySystem {
     this.sky = new Sky(); this.sky.scale.setScalar(40000); this.sky.material.fog = false; scene.add(this.sky);
     const u = this.sky.material.uniforms; u.mieCoefficient.value = 0.004; u.mieDirectionalG.value = 0.82;
     this.sun = new THREE.DirectionalLight(0xffffff, 3); this.sun.castShadow = true;
-    const S = mobile ? 90 : 150, sh = this.sun.shadow;
-    sh.mapSize.setScalar(mobile ? 1024 : 2048); sh.camera.far = 1200; sh.camera.left = -S; sh.camera.right = S; sh.camera.top = S; sh.camera.bottom = -S;
+    // a wider shadow area (whole streets and rooftops in view keep their shadows) with a bigger map to keep them sharp
+    const S = mobile ? 120 : 230, sh = this.sun.shadow;
+    sh.mapSize.setScalar(mobile ? 2048 : 4096); sh.camera.far = 1200; sh.camera.left = -S; sh.camera.right = S; sh.camera.top = S; sh.camera.bottom = -S;
     sh.camera.near = 1; sh.camera.far = 900; sh.bias = -0.0004; sh.normalBias = 0.6;
     scene.add(this.sun, this.sun.target);
     this.hemi = new THREE.HemisphereLight(0xbfd8ff, 0x4a4438, 1); scene.add(this.hemi);
